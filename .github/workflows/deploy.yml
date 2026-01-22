@@ -10,14 +10,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload public/ to /public_html via SFTP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SFTP_HOST }}
-          username: ${{ secrets.SFTP_USER }}
-          password: ${{ secrets.SFTP_PASS }}
-          port: ${{ secrets.SFTP_PORT }}
-          source: "public/*"
-          target: ${{ secrets.SFTP_PATH }}
-          strip_components: 1
-          overwrite: true
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy public/ via SFTP (pure upload)
+        env:
+          HOST: ${{ secrets.SFTP_HOST }}
+          PORT: ${{ secrets.SFTP_PORT }}
+          USER: ${{ secrets.SFTP_USER }}
+          PASS: ${{ secrets.SFTP_PASS }}
+          TARGET: ${{ secrets.SFTP_PATH }}
+        run: |
+          set -e
+          # upload public/* into TARGET (e.g. /public_html)
+          lftp -u "$USER","$PASS" -p "$PORT" sftp://"$HOST" <<EOF
+          set sftp:auto-confirm yes
+          set net:max-retries 2
+          set net:timeout 20
+          set cmd:fail-exit yes
+          cd "$TARGET"
+          mirror -R --only-newer --verbose --parallel=2 public .
+          bye
+          EOF
