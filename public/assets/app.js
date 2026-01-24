@@ -30,13 +30,13 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Close alert messages
-  document.querySelectorAll('.alert-close').forEach(button => {
-    button.addEventListener('click', function() {
-      const alert = this.closest('.alert');
+  document.body.addEventListener('click', function(e) {
+    if (e.target.classList.contains('alert-close')) {
+      const alert = e.target.closest('.alert');
       if (alert) {
         alert.remove();
       }
-    });
+    }
   });
 
   // User dropdown menu toggle
@@ -85,39 +85,7 @@ function openFamilyTreesModal() {
     .then(response => response.text())
     .then(html => {
       overlay.innerHTML = html;
-      // Re-attach event listeners
-      const closeBtn = overlay.querySelector('.modal-close');
-      if (closeBtn) {
-        closeBtn.addEventListener('click', function(e) {
-          e.preventDefault();
-          closeFamilyTreesModal();
-        });
-      }
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          closeFamilyTreesModal();
-        }
-      });
-      // Re-attach alert close buttons
-      overlay.querySelectorAll('.alert-close').forEach(button => {
-        button.addEventListener('click', function() {
-          const alert = this.closest('.alert');
-          if (alert) {
-            alert.remove();
-          }
-        });
-      });
-      
-      // Execute any scripts in the loaded HTML
-      const scripts = overlay.querySelectorAll('script');
-      scripts.forEach(oldScript => {
-        const newScript = document.createElement('script');
-        Array.from(oldScript.attributes).forEach(attr => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-        oldScript.parentNode.replaceChild(newScript, oldScript);
-      });
+      initFamilyTreesModal(overlay);
       
       // Show modal
       setTimeout(() => overlay.classList.add('active'), 10);
@@ -134,4 +102,191 @@ function closeFamilyTreesModal() {
     modal.classList.remove('active');
     setTimeout(() => modal.remove(), 300);
   }
+}
+
+function initFamilyTreesModal(overlay) {
+  // Attach close button
+  const closeBtn = overlay.querySelector('.modal-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      closeFamilyTreesModal();
+    });
+  }
+  
+  // Close on overlay click
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      closeFamilyTreesModal();
+    }
+  });
+
+  // Attach Create Form Handler
+  const createForm = overlay.querySelector('#create-tree-form');
+  if (createForm) {
+    createForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      handleTreeFormSubmit(createForm, true);
+    });
+  }
+
+  // Attach Actions (Edit/Rename, Delete) handlers via delegation
+  const treesContainer = overlay.querySelector('#trees-container');
+  if (treesContainer) {
+    treesContainer.addEventListener('click', function(e) {
+      const target = e.target;
+      
+      // Delete
+      if (target.closest('.delete-tree')) {
+        const btn = target.closest('.delete-tree');
+        const id = btn.getAttribute('data-id');
+        if (confirm('Naozaj chcete zmazať tento rodokmeň? Táto akcia je nevratná.')) {
+          deleteTree(id, true);
+        }
+      }
+      
+      // Start Rename
+      if (target.closest('.edit-tree')) {
+        const btn = target.closest('.edit-tree');
+        const row = btn.closest('tr');
+        row.querySelector('.tree-name-text').style.display = 'none';
+        row.querySelector('.rename-form').style.display = 'flex';
+        btn.style.display = 'none';
+      }
+      
+      // Save Rename
+      if (target.closest('.save-rename')) {
+        const btn = target.closest('.save-rename');
+        const form = btn.closest('.rename-form');
+        handleRenameSubmit(form, true);
+      }
+      
+      // Cancel Rename
+      if (target.closest('.cancel-rename')) {
+        const btn = target.closest('.cancel-rename');
+        const row = btn.closest('tr');
+        row.querySelector('.tree-name-text').style.display = '';
+        row.querySelector('.rename-form').style.display = 'none';
+        row.querySelector('.edit-tree').style.display = '';
+      }
+    });
+  }
+}
+
+function refreshTreeList(isModal) {
+  const containerId = isModal ? '#trees-container' : '#trees-container'; // ID is same, context differs
+  const container = isModal 
+    ? document.querySelector('#family-trees-modal #trees-container')
+    : document.querySelector('#trees-container');
+
+  if (!container) return;
+
+  fetch('/family-trees.php?list_only=1')
+    .then(r => r.text())
+    .then(html => {
+      container.innerHTML = html;
+    })
+    .catch(console.error);
+}
+
+function showFlash(message, type = 'success', isModal = false) {
+  const alertHtml = `
+    <div class="alert alert-${type}">
+      <button type="button" class="alert-close">x</button>
+      ${message}
+    </div>
+  `;
+  
+  const container = isModal 
+    ? document.querySelector('#family-trees-modal #modal-alerts') 
+    : document.querySelector('#page-alerts');
+
+  if (container) {
+    container.innerHTML = alertHtml;
+  }
+}
+
+function handleTreeFormSubmit(form, isModal) {
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Pracujem...';
+
+  const formData = new FormData(form);
+
+  fetch('/family-trees.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      showFlash(data.message, 'success', isModal);
+      form.reset();
+      refreshTreeList(isModal);
+    } else {
+      showFlash(data.message, 'error', isModal);
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    showFlash('Chyba komunikácie so serverom.', 'error', isModal);
+  })
+  .finally(() => {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  });
+}
+
+function deleteTree(id, isModal) {
+  const formData = new FormData();
+  formData.append('action', 'delete');
+  formData.append('id', id);
+  // Need CSRF token - try to find one in the page
+  const token = document.querySelector('input[name="csrf_token"]')?.value;
+  if (token) formData.append('csrf_token', token);
+
+  fetch('/family-trees.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      showFlash(data.message, 'success', isModal);
+      refreshTreeList(isModal);
+    } else {
+      showFlash(data.message, 'error', isModal);
+    }
+  })
+  .catch(console.error);
+}
+
+function handleRenameSubmit(form, isModal) {
+  const formData = new FormData(form);
+  // CSRF is already in the form hidden input (copied from main form or handled globally if added)
+  // Actually, my renderTreeList didn't add CSRF to rename forms.
+  // Let's grab it globally.
+  const token = document.querySelector('input[name="csrf_token"]')?.value;
+  if (token && !formData.has('csrf_token')) {
+    formData.append('csrf_token', token);
+  }
+
+  fetch('/family-trees.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      showFlash(data.message, 'success', isModal);
+      refreshTreeList(isModal);
+    } else {
+      showFlash(data.message, 'error', isModal);
+    }
+  })
+  .catch(console.error);
 }
