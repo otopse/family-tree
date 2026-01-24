@@ -82,6 +82,7 @@ render_header('Prihlásenie');
       <?php render_flash(); ?>
       <?php if ($errors): ?>
         <div class="alert alert-error">
+          <button type="button" class="alert-close" aria-label="Zavrieť">x</button>
           <ul>
             <?php foreach ($errors as $error): ?>
               <li><?= e($error) ?></li>

@@ -463,6 +463,8 @@ body {
   border-radius: 8px;
   margin-bottom: 16px;
   font-size: 0.95rem;
+  position: relative;
+  padding-right: 40px;
 }
 
 .alert-success {
@@ -481,6 +483,23 @@ body {
   background: #eff6ff;
   color: #1e3a8a;
   border: 1px solid #bfdbfe;
+}
+
+.alert-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+}
+
+.alert-close:hover {
+  opacity: 0.8;
 }
 
 .auth-links {

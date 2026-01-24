@@ -10,6 +10,12 @@ $debugData = [
   'page' => 'verify-phone',
 ];
 
+if (!empty($_SESSION['debug_sms_code'])) {
+  $debugData['last_sms_code'] = (string) $_SESSION['debug_sms_code'];
+  $debugData['last_sms_phone'] = (string) ($_SESSION['debug_sms_phone'] ?? '');
+  $debugData['last_sms_sent_at'] = (string) ($_SESSION['debug_sms_sent_at'] ?? '');
+}
+
 if ($prefillIdentifier === '' && !empty($_SESSION['pending_user_id'])) {
   $stmt = db()->prepare('SELECT email FROM users WHERE id = :id LIMIT 1');
   $stmt->execute(['id' => $_SESSION['pending_user_id']]);
@@ -152,6 +158,7 @@ render_header('Overenie telefónu');
       <?php render_flash(); ?>
       <?php if ($errors): ?>
         <div class="alert alert-error">
+          <button type="button" class="alert-close" aria-label="Zavrieť">x</button>
           <ul>
             <?php foreach ($errors as $error): ?>
               <li><?= e($error) ?></li>
@@ -160,7 +167,10 @@ render_header('Overenie telefónu');
         </div>
       <?php endif; ?>
       <?php if ($verified): ?>
-        <div class="alert alert-success">Telefón je overený. Môžete sa prihlásiť.</div>
+        <div class="alert alert-success">
+          <button type="button" class="alert-close" aria-label="Zavrieť">x</button>
+          Telefón je overený. Môžete sa prihlásiť.
+        </div>
         <div class="auth-links">
           <a href="/login.php">Prihlásiť sa</a>
         </div>

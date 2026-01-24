@@ -28,4 +28,14 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+
+  // Close alert messages
+  document.querySelectorAll('.alert-close').forEach(button => {
+    button.addEventListener('click', function() {
+      const alert = this.closest('.alert');
+      if (alert) {
+        alert.remove();
+      }
+    });
+  });
 });

@@ -220,6 +220,10 @@ function send_sms_code(string $phone, string $code): bool {
   $apiUrl = (string) config('sms_api_url', '');
   $apiToken = (string) config('sms_api_token', '');
 
+  $_SESSION['debug_sms_code'] = $code;
+  $_SESSION['debug_sms_phone'] = $phone;
+  $_SESSION['debug_sms_sent_at'] = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+
   if ($apiUrl !== '') {
     if (!function_exists('curl_init')) {
       return false;

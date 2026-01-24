@@ -8,7 +8,10 @@ function render_flash(): void {
   foreach ($messages as $message) {
     $type = $message['type'] ?? 'info';
     $text = $message['message'] ?? '';
-    echo '<div class="alert alert-' . e($type) . '">' . e($text) . '</div>';
+    echo '<div class="alert alert-' . e($type) . '">';
+    echo '<button type="button" class="alert-close" aria-label="Zavrieť">x</button>';
+    echo e($text);
+    echo '</div>';
   }
 }
 

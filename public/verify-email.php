@@ -110,6 +110,7 @@ render_header('Overenie emailu');
       <?php render_flash(); ?>
       <?php if ($errors): ?>
         <div class="alert alert-error">
+          <button type="button" class="alert-close" aria-label="Zavrieť">x</button>
           <ul>
             <?php foreach ($errors as $error): ?>
               <li><?= e($error) ?></li>
@@ -118,7 +119,10 @@ render_header('Overenie emailu');
         </div>
       <?php endif; ?>
       <?php if ($verified): ?>
-        <div class="alert alert-success">Email je overený. Pokračujte overením telefónu alebo sa prihláste.</div>
+        <div class="alert alert-success">
+          <button type="button" class="alert-close" aria-label="Zavrieť">x</button>
+          Email je overený. Pokračujte overením telefónu alebo sa prihláste.
+        </div>
         <div class="auth-links">
           <a href="/verify-phone.php">Overiť telefón</a>
           <a href="/login.php">Prihlásiť sa</a>
