@@ -42,7 +42,8 @@ function render_header(string $title): void {
   echo '      </ul>';
   echo '      <div class="nav-auth">';
   if ($user) {
-    echo '        <a href="/account.php" class="btn-link">Účet</a>';
+    $displayName = $user['username'] ?? $user['email'] ?? 'Účet';
+    echo '        <a href="/account.php" class="btn-link">' . e($displayName) . '</a>';
     echo '        <a href="/logout.php" class="btn-primary">Odhlásiť</a>';
   } else {
     echo '        <a href="/login.php" class="btn-link">Prihlásenie</a>';

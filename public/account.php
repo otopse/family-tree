@@ -12,6 +12,10 @@ render_header('Môj účet');
       <h1 class="section-title">Môj účet</h1>
       <?php render_flash(); ?>
       <div class="form-group">
+        <label>Používateľské meno</label>
+        <div><?= e($user['username'] ?? '') ?></div>
+      </div>
+      <div class="form-group">
         <label>Email</label>
         <div><?= e($user['email']) ?></div>
       </div>

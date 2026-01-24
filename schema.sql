@@ -1,5 +1,6 @@
 CREATE TABLE `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `username` VARCHAR(50) NOT NULL,
   `email` VARCHAR(255) NOT NULL,
   `phone` VARCHAR(32) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,

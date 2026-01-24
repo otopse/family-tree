@@ -220,10 +220,6 @@ function send_sms_code(string $phone, string $code): bool {
   $apiUrl = (string) config('sms_api_url', '');
   $apiToken = (string) config('sms_api_token', '');
 
-  $_SESSION['debug_sms_code'] = $code;
-  $_SESSION['debug_sms_phone'] = $phone;
-  $_SESSION['debug_sms_sent_at'] = (new DateTimeImmutable())->format('Y-m-d H:i:s');
-
   if ($apiUrl !== '') {
     if (!function_exists('curl_init')) {
       return false;
@@ -270,7 +266,7 @@ function current_user(): ?array {
     return null;
   }
 
-  $stmt = db()->prepare('SELECT id, email, phone, email_verified_at, phone_verified_at FROM users WHERE id = :id');
+  $stmt = db()->prepare('SELECT id, username, email, phone, email_verified_at, phone_verified_at FROM users WHERE id = :id');
   $stmt->execute(['id' => $_SESSION['user_id']]);
   $user = $stmt->fetch();
 

@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+
+require_once __DIR__ . '/_bootstrap.php';
+
+$user = current_user();
 ?><!doctype html>
 <html lang="sk">
 <head>
@@ -21,8 +25,13 @@ declare(strict_types=1);
         <li><a href="#contact">Contact</a></li>
       </ul>
       <div class="nav-auth">
-        <a href="/login.php" class="btn-link">Prihlásenie</a>
-        <a href="/register.php" class="btn-primary">Registrácia</a>
+        <?php if ($user): ?>
+          <a href="/account.php" class="btn-link"><?= e($user['username'] ?? $user['email']) ?></a>
+          <a href="/logout.php" class="btn-primary">Odhlásiť</a>
+        <?php else: ?>
+          <a href="/login.php" class="btn-link">Prihlásenie</a>
+          <a href="/register.php" class="btn-primary">Registrácia</a>
+        <?php endif; ?>
       </div>
       <button class="nav-toggle" aria-label="Toggle menu">
         <span></span>

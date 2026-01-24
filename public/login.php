@@ -78,6 +78,7 @@ render_header('Prihlásenie');
 ?>
   <div class="container">
     <div class="auth-card">
+      <a href="/" class="auth-close" aria-label="Zavrieť">x</a>
       <h1 class="section-title">Prihlásenie</h1>
       <?php render_flash(); ?>
       <?php if ($errors): ?>

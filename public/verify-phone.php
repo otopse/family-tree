@@ -6,15 +6,6 @@ require_once __DIR__ . '/_layout.php';
 $errors = [];
 $prefillIdentifier = trim((string) ($_GET['email'] ?? ''));
 $verified = false;
-$debugData = [
-  'page' => 'verify-phone',
-];
-
-if (!empty($_SESSION['debug_sms_code'])) {
-  $debugData['last_sms_code'] = (string) $_SESSION['debug_sms_code'];
-  $debugData['last_sms_phone'] = (string) ($_SESSION['debug_sms_phone'] ?? '');
-  $debugData['last_sms_sent_at'] = (string) ($_SESSION['debug_sms_sent_at'] ?? '');
-}
 
 if ($prefillIdentifier === '' && !empty($_SESSION['pending_user_id'])) {
   $stmt = db()->prepare('SELECT email FROM users WHERE id = :id LIMIT 1');
@@ -35,18 +26,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $code = trim((string) ($_POST['code'] ?? ''));
   $prefillIdentifier = $identifier;
   $code = preg_replace('/\D+/', '', $code ?? '');
-
-  $debugData['action'] = $action;
-  $debugData['identifier'] = $identifier;
-  $debugData['input_code'] = $code;
-  $debugData['should_hash'] = should_store_phone_code_hashed() ? 'yes' : 'no';
+  $smsGatewayConfigured = config('sms_api_url') !== '';
 
   if ($identifier === '') {
     $errors[] = 'Zadajte email alebo telefónne číslo.';
   }
 
-  if ($action === 'verify' && $code === '') {
-    $errors[] = 'Zadajte SMS kód.';
+  if ($action === 'verify') {
+    if ($code === '') {
+      $errors[] = 'Zadajte SMS kód.';
+    } elseif (!preg_match('/^\d{6}$/', $code)) {
+      $errors[] = 'Zadajte 6-miestny SMS kód.';
+    }
   }
 
   if (!$errors) {
@@ -67,14 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$user) {
       $errors[] = 'Používateľ s týmito údajmi neexistuje.';
-      $debugData['user'] = 'not_found';
     } elseif (!empty($user['phone_verified_at'])) {
       flash('info', 'Telefón je už overený. Môžete sa prihlásiť.');
-      $debugData['user'] = 'already_verified';
     } else {
-      $debugData['user'] = 'found';
-      $debugData['stored_code'] = (string) ($user['phone_verification_code'] ?? '');
-      $debugData['sent_at'] = (string) ($user['phone_verification_sent_at'] ?? '');
       if ($action === 'resend') {
         if (!can_resend($user['phone_verification_sent_at'] ?? null, 2)) {
           $errors[] = 'Nový kód môžete poslať najskôr o pár minút.';
@@ -103,27 +89,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ttlMinutes = (int) config('phone_code_ttl_minutes', 10);
         $expired = false;
 
-        if ($sentAt) {
+        if ($smsGatewayConfigured && $sentAt) {
           $sentTime = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $sentAt);
           if ($sentTime && $sentTime < (new DateTimeImmutable())->modify("-{$ttlMinutes} minutes")) {
             $expired = true;
           }
         }
 
-        if ($expired) {
+        if ($smsGatewayConfigured && $expired) {
           $errors[] = 'SMS kód vypršal. Pošlite si nový.';
-          $debugData['expired'] = 'yes';
-        } else {
-          $debugData['expired'] = 'no';
+        } elseif ($smsGatewayConfigured) {
           $storedCode = (string) ($user['phone_verification_code'] ?? '');
           if ($storedCode === '') {
             $errors[] = 'SMS kód už nie je platný. Pošlite si nový.';
           } else {
             $codeHash = hash_token($code);
             $matches = hash_equals($storedCode, $codeHash) || hash_equals($storedCode, $code);
-            $debugData['input_hash'] = $codeHash;
-            $debugData['match_hash'] = hash_equals($storedCode, $codeHash) ? 'yes' : 'no';
-            $debugData['match_raw'] = hash_equals($storedCode, $code) ? 'yes' : 'no';
             if (!$matches) {
               $errors[] = 'Nesprávny SMS kód.';
             }
@@ -194,18 +175,6 @@ render_header('Overenie telefónu');
         <input type="hidden" name="identifier" value="<?= e($prefillIdentifier) ?>">
         <button class="btn-secondary" type="submit">Znovu poslať SMS kód</button>
       </form>
-      <?php if ($debugData): ?>
-        <?php
-          $debugParts = [];
-          foreach ($debugData as $key => $value) {
-            $debugParts[] = $key . '=' . $value;
-          }
-          $debugText = 'Debug: ' . implode(' | ', $debugParts);
-        ?>
-        <div style="margin-top: 24px; font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">
-          <?= e($debugText) ?>
-        </div>
-      <?php endif; ?>
     </div>
   </div>
 <?php

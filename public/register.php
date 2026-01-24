@@ -5,6 +5,7 @@ require_once __DIR__ . '/_layout.php';
 
 $errors = [];
 $values = [
+  'username' => '',
   'email' => '',
   'phone' => '',
 ];
@@ -14,10 +15,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors[] = 'Neplatný bezpečnostný token. Skúste to prosím znova.';
   }
 
+  $values['username'] = trim((string) ($_POST['username'] ?? ''));
   $values['email'] = strtolower(trim((string) ($_POST['email'] ?? '')));
   $values['phone'] = normalize_phone((string) ($_POST['phone'] ?? ''));
   $password = (string) ($_POST['password'] ?? '');
   $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
+
+  if ($values['username'] === '') {
+    $errors[] = 'Zadajte používateľské meno.';
+  } elseif (strlen($values['username']) < 3 || strlen($values['username']) > 50) {
+    $errors[] = 'Používateľské meno musí mať 3 až 50 znakov.';
+  }
 
   if ($values['email'] === '' || !filter_var($values['email'], FILTER_VALIDATE_EMAIL)) {
     $errors[] = 'Zadajte platný email.';
@@ -54,11 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
 
     $stmt = db()->prepare(
-      'INSERT INTO users (email, phone, password_hash, email_verification_token, email_verification_sent_at, phone_verification_code, phone_verification_sent_at, created_at, updated_at)
-       VALUES (:email, :phone, :password_hash, :email_token, :email_sent_at, :phone_code, :phone_sent_at, :created_at, :updated_at)'
+      'INSERT INTO users (username, email, phone, password_hash, email_verification_token, email_verification_sent_at, phone_verification_code, phone_verification_sent_at, created_at, updated_at)
+       VALUES (:username, :email, :phone, :password_hash, :email_token, :email_sent_at, :phone_code, :phone_sent_at, :created_at, :updated_at)'
     );
 
     $stmt->execute([
+      'username' => $values['username'],
       'email' => $values['email'],
       'phone' => $values['phone'],
       'password_hash' => password_hash($password, PASSWORD_DEFAULT),
@@ -95,6 +104,7 @@ render_header('Registrácia');
 ?>
   <div class="container">
     <div class="auth-card">
+      <a href="/" class="auth-close" aria-label="Zavrieť">x</a>
       <h1 class="section-title">Registrácia</h1>
       <?php render_flash(); ?>
       <?php if ($errors): ?>
@@ -109,6 +119,10 @@ render_header('Registrácia');
       <?php endif; ?>
       <form method="post" action="/register.php">
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+        <div class="form-group">
+          <label for="username">Používateľské meno</label>
+          <input class="form-control" type="text" id="username" name="username" value="<?= e($values['username']) ?>" required>
+        </div>
         <div class="form-group">
           <label for="email">Email</label>
           <input class="form-control" type="email" id="email" name="email" value="<?= e($values['email']) ?>" required>

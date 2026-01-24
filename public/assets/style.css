@@ -418,6 +418,7 @@ body {
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-color);
+  position: relative;
 }
 
 .auth-card .section-title {
@@ -519,6 +520,21 @@ body {
 
 .auth-links a:hover {
   text-decoration: underline;
+}
+
+.auth-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.auth-close:hover {
+  color: var(--text-primary);
 }
 
 /* Responsive Design */
