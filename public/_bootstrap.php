@@ -142,6 +142,49 @@ function hash_token(string $token): string {
   return hash('sha256', $token);
 }
 
+function should_store_phone_code_hashed(): bool {
+  static $cache = null;
+  if ($cache !== null) {
+    return $cache;
+  }
+
+  try {
+    $stmt = db()->query(
+      "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'users'
+         AND COLUMN_NAME = 'phone_verification_code'
+       LIMIT 1"
+    );
+    $column = $stmt->fetch();
+    if (!$column) {
+      $cache = true;
+      return $cache;
+    }
+
+    $type = strtolower((string) ($column['DATA_TYPE'] ?? ''));
+    $length = (int) ($column['CHARACTER_MAXIMUM_LENGTH'] ?? 0);
+    $numericTypes = ['tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'decimal', 'numeric', 'float', 'double'];
+
+    if (in_array($type, $numericTypes, true)) {
+      $cache = false;
+      return $cache;
+    }
+
+    if ($length > 0 && $length < 64) {
+      $cache = false;
+      return $cache;
+    }
+  } catch (Throwable $e) {
+    $cache = true;
+    return $cache;
+  }
+
+  $cache = true;
+  return $cache;
+}
+
 function can_resend(?string $sentAt, int $minMinutes): bool {
   if ($sentAt === null || $sentAt === '') {
     return true;

@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $identifier = trim((string) ($_POST['identifier'] ?? $prefillIdentifier));
   $code = trim((string) ($_POST['code'] ?? ''));
   $prefillIdentifier = $identifier;
+  $code = preg_replace('/\D+/', '', $code ?? '');
 
   if ($identifier === '') {
     $errors[] = 'Zadajte email alebo telefónne číslo.';
@@ -60,12 +61,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $errors[] = 'Nový kód môžete poslať najskôr o pár minút.';
         } else {
           $smsCode = (string) random_int(100000, 999999);
+          $phoneCodeToStore = should_store_phone_code_hashed() ? hash_token($smsCode) : $smsCode;
           $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
           $update = db()->prepare(
             'UPDATE users SET phone_verification_code = :code, phone_verification_sent_at = :sent_at, updated_at = :updated_at WHERE id = :id'
           );
           $update->execute([
-            'code' => hash_token($smsCode),
+            'code' => $phoneCodeToStore,
             'sent_at' => $now,
             'updated_at' => $now,
             'id' => $user['id'],
@@ -91,9 +93,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($expired) {
           $errors[] = 'SMS kód vypršal. Pošlite si nový.';
-        } elseif (hash_token($code) !== $user['phone_verification_code']) {
-          $errors[] = 'Nesprávny SMS kód.';
         } else {
+          $storedCode = (string) ($user['phone_verification_code'] ?? '');
+          if ($storedCode === '') {
+            $errors[] = 'SMS kód už nie je platný. Pošlite si nový.';
+          } else {
+            $codeHash = hash_token($code);
+            $matches = hash_equals($storedCode, $codeHash) || hash_equals($storedCode, $code);
+            if (!$matches) {
+              $errors[] = 'Nesprávny SMS kód.';
+            }
+          }
+        }
+        if (!$errors) {
           $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
           $update = db()->prepare(
             'UPDATE users

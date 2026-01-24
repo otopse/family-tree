@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   if (!$errors) {
     $emailToken = generate_token();
     $smsCode = (string) random_int(100000, 999999);
+    $phoneCodeToStore = should_store_phone_code_hashed() ? hash_token($smsCode) : $smsCode;
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
 
     $stmt = db()->prepare(
@@ -63,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       'password_hash' => password_hash($password, PASSWORD_DEFAULT),
       'email_token' => hash_token($emailToken),
       'email_sent_at' => $now,
-      'phone_code' => hash_token($smsCode),
+      'phone_code' => $phoneCodeToStore,
       'phone_sent_at' => $now,
       'created_at' => $now,
       'updated_at' => $now,
