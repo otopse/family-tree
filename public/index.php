@@ -21,8 +21,8 @@ declare(strict_types=1);
         <li><a href="#contact">Contact</a></li>
       </ul>
       <div class="nav-auth">
-        <a href="#login" class="btn-link">Login</a>
-        <a href="#signup" class="btn-primary">Sign Up</a>
+        <a href="/login.php" class="btn-link">Prihlásenie</a>
+        <a href="/register.php" class="btn-primary">Registrácia</a>
       </div>
       <button class="nav-toggle" aria-label="Toggle menu">
         <span></span>
@@ -33,12 +33,12 @@ declare(strict_types=1);
   </nav>
 
   <main>
-    <section class="hero">
+    <section class="hero" id="home">
       <div class="container">
         <h1 class="hero-title">Vytvorte si svoj rodokmeň</h1>
         <p class="hero-subtitle">Objavte históriu svojej rodiny a zachovajte ju pre budúce generácie</p>
         <div class="hero-cta">
-          <a href="#signup" class="btn-primary btn-large">Začať zdarma</a>
+          <a href="/register.php" class="btn-primary btn-large">Začať zdarma</a>
           <a href="#features" class="btn-secondary btn-large">Zistiť viac</a>
         </div>
       </div>
@@ -84,7 +84,7 @@ declare(strict_types=1);
               <li>Základné zobrazenie rodokmeňa</li>
               <li>5 GB úložného priestoru</li>
             </ul>
-            <a href="#signup" class="btn-secondary">Začať</a>
+            <a href="/register.php" class="btn-secondary">Začať</a>
           </div>
           <div class="pricing-card featured">
             <div class="badge">Odporúčané</div>
@@ -96,7 +96,7 @@ declare(strict_types=1);
               <li>50 GB úložného priestoru</li>
               <li>Prioritná podpora</li>
             </ul>
-            <a href="#signup" class="btn-primary">Vybrať</a>
+            <a href="/register.php" class="btn-primary">Vybrať</a>
           </div>
         </div>
       </div>
