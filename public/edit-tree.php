@@ -5,7 +5,7 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
-require_once __DIR__ . '/_bootstrap.php';
+require_once __DIR__ . '/_layout.php';
 
 $user = require_login();
 $treeId = (int) ($_GET['id'] ?? 0);
