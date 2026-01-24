@@ -6,6 +6,9 @@ require_once __DIR__ . '/_layout.php';
 $errors = [];
 $prefillIdentifier = trim((string) ($_GET['email'] ?? ''));
 $verified = false;
+$debugData = [
+  'page' => 'verify-phone',
+];
 
 if ($prefillIdentifier === '' && !empty($_SESSION['pending_user_id'])) {
   $stmt = db()->prepare('SELECT email FROM users WHERE id = :id LIMIT 1');
@@ -26,6 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $code = trim((string) ($_POST['code'] ?? ''));
   $prefillIdentifier = $identifier;
   $code = preg_replace('/\D+/', '', $code ?? '');
+
+  $debugData['action'] = $action;
+  $debugData['identifier'] = $identifier;
+  $debugData['input_code'] = $code;
+  $debugData['should_hash'] = should_store_phone_code_hashed() ? 'yes' : 'no';
 
   if ($identifier === '') {
     $errors[] = 'Zadajte email alebo telefónne číslo.';
@@ -53,9 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$user) {
       $errors[] = 'Používateľ s týmito údajmi neexistuje.';
+      $debugData['user'] = 'not_found';
     } elseif (!empty($user['phone_verified_at'])) {
       flash('info', 'Telefón je už overený. Môžete sa prihlásiť.');
+      $debugData['user'] = 'already_verified';
     } else {
+      $debugData['user'] = 'found';
+      $debugData['stored_code'] = (string) ($user['phone_verification_code'] ?? '');
+      $debugData['sent_at'] = (string) ($user['phone_verification_sent_at'] ?? '');
       if ($action === 'resend') {
         if (!can_resend($user['phone_verification_sent_at'] ?? null, 2)) {
           $errors[] = 'Nový kód môžete poslať najskôr o pár minút.';
@@ -93,13 +106,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($expired) {
           $errors[] = 'SMS kód vypršal. Pošlite si nový.';
+          $debugData['expired'] = 'yes';
         } else {
+          $debugData['expired'] = 'no';
           $storedCode = (string) ($user['phone_verification_code'] ?? '');
           if ($storedCode === '') {
             $errors[] = 'SMS kód už nie je platný. Pošlite si nový.';
           } else {
             $codeHash = hash_token($code);
             $matches = hash_equals($storedCode, $codeHash) || hash_equals($storedCode, $code);
+            $debugData['input_hash'] = $codeHash;
+            $debugData['match_hash'] = hash_equals($storedCode, $codeHash) ? 'yes' : 'no';
+            $debugData['match_raw'] = hash_equals($storedCode, $code) ? 'yes' : 'no';
             if (!$matches) {
               $errors[] = 'Nesprávny SMS kód.';
             }
@@ -166,6 +184,18 @@ render_header('Overenie telefónu');
         <input type="hidden" name="identifier" value="<?= e($prefillIdentifier) ?>">
         <button class="btn-secondary" type="submit">Znovu poslať SMS kód</button>
       </form>
+      <?php if ($debugData): ?>
+        <?php
+          $debugParts = [];
+          foreach ($debugData as $key => $value) {
+            $debugParts[] = $key . '=' . $value;
+          }
+          $debugText = 'Debug: ' . implode(' | ', $debugParts);
+        ?>
+        <div style="margin-top: 24px; font-size: 0.85rem; color: var(--text-secondary); font-style: italic;">
+          <?= e($debugText) ?>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 <?php
