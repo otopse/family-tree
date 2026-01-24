@@ -9,6 +9,7 @@ render_header('Môj účet');
 ?>
   <div class="container">
     <div class="auth-card">
+      <a href="/" class="auth-close" aria-label="Zavrieť">x</a>
       <h1 class="section-title">Môj účet</h1>
       <?php render_flash(); ?>
       <div class="form-group">
@@ -29,9 +30,6 @@ render_header('Môj účet');
           Email: <?= $user['email_verified_at'] ? 'overený' : 'neoverený' ?>,
           Telefón: <?= $user['phone_verified_at'] ? 'overený' : 'neoverený' ?>
         </div>
-      </div>
-      <div class="auth-links">
-        <a href="/logout.php">Odhlásiť sa</a>
       </div>
     </div>
   </div>

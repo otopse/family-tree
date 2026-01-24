@@ -26,8 +26,14 @@ $user = current_user();
       </ul>
       <div class="nav-auth">
         <?php if ($user): ?>
-          <a href="/account.php" class="btn-link"><?= e($user['username'] ?? $user['email']) ?></a>
-          <a href="/logout.php" class="btn-primary">Odhlásiť</a>
+          <div class="nav-user">
+            <button type="button" class="nav-user-toggle"><?= e($user['username'] ?? $user['email']) ?></button>
+            <div class="nav-user-menu">
+              <a href="/account.php">Môj účet</a>
+              <a href="/family-trees.php">Moje rodokmene</a>
+              <a href="/logout.php">Odhlásiť sa</a>
+            </div>
+          </div>
         <?php else: ?>
           <a href="/login.php" class="btn-link">Prihlásenie</a>
           <a href="/register.php" class="btn-primary">Registrácia</a>

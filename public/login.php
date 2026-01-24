@@ -69,7 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'updated_at' => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
         'id' => $user['id'],
       ]);
-      redirect('/account.php');
+      flash('success', 'Úspešne ste sa prihlásili.');
+      redirect('/');
     }
   }
 }

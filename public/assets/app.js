@@ -38,4 +38,21 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+
+  // User dropdown menu toggle
+  const userToggle = document.querySelector('.nav-user-toggle');
+  const userMenu = document.querySelector('.nav-user-menu');
+  if (userToggle && userMenu) {
+    userToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      userMenu.classList.toggle('active');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!userToggle.contains(e.target) && !userMenu.contains(e.target)) {
+        userMenu.classList.remove('active');
+      }
+    });
+  }
 });

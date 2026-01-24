@@ -40,16 +40,22 @@ function render_header(string $title): void {
   echo '        <li><a href="/#pricing">Cenník</a></li>';
   echo '        <li><a href="/#contact">Kontakt</a></li>';
   echo '      </ul>';
-  echo '      <div class="nav-auth">';
-  if ($user) {
-    $displayName = $user['username'] ?? $user['email'] ?? 'Účet';
-    echo '        <a href="/account.php" class="btn-link">' . e($displayName) . '</a>';
-    echo '        <a href="/logout.php" class="btn-primary">Odhlásiť</a>';
-  } else {
-    echo '        <a href="/login.php" class="btn-link">Prihlásenie</a>';
-    echo '        <a href="/register.php" class="btn-primary">Registrácia</a>';
-  }
-  echo '      </div>';
+      echo '      <div class="nav-auth">';
+      if ($user) {
+        $displayName = $user['username'] ?? $user['email'] ?? 'Účet';
+        echo '        <div class="nav-user">';
+        echo '          <button type="button" class="nav-user-toggle">' . e($displayName) . '</button>';
+        echo '          <div class="nav-user-menu">';
+        echo '            <a href="/account.php">Môj účet</a>';
+        echo '            <a href="/family-trees.php">Moje rodokmene</a>';
+        echo '            <a href="/logout.php">Odhlásiť sa</a>';
+        echo '          </div>';
+        echo '        </div>';
+      } else {
+        echo '        <a href="/login.php" class="btn-link">Prihlásenie</a>';
+        echo '        <a href="/register.php" class="btn-primary">Registrácia</a>';
+      }
+      echo '      </div>';
   echo '      <button class="nav-toggle" aria-label="Toggle menu">';
   echo '        <span></span><span></span><span></span>';
   echo '      </button>';
