@@ -46,6 +46,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       jsonResponse(true, 'Rodokmeň bol úspešne vytvorený.');
     } 
+    elseif ($action === 'import_gedcom') {
+      if (empty($_FILES['gedcom_file']) || $_FILES['gedcom_file']['error'] !== UPLOAD_ERR_OK) {
+        jsonResponse(false, 'Chyba pri nahrávaní súboru.');
+      }
+
+      $file = $_FILES['gedcom_file'];
+      $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+      if ($ext !== 'ged') {
+        jsonResponse(false, 'Prosím nahrajte súbor s príponou .ged');
+      }
+
+      // Read file content
+      $content = file_get_contents($file['tmp_name']);
+      if ($content === false) {
+        jsonResponse(false, 'Nepodarilo sa prečítať súbor.');
+      }
+
+      // Simple GEDCOM parsing to find HEAD...SOUR...NAME or just use filename
+      // For MVP, we use filename as tree name and save raw content to tree_nodes (or a new column)
+      // Since we don't have a parser yet, we'll just create the tree with the filename.
+      
+      $treeName = pathinfo($file['name'], PATHINFO_FILENAME);
+      
+      // Parse GEDCOM and populate ft_records/ft_elements
+      require_once __DIR__ . '/_gedcom_parser.php';
+
+      $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+      $stmt = db()->prepare(
+        'INSERT INTO family_trees (owner, tree_name, tree_nodes, created, modified, enabled)
+         VALUES (:owner, :tree_name, :tree_nodes, :created, :modified, :enabled)'
+      );
+      
+      $stmt->execute([
+        'owner' => $user['id'],
+        'tree_name' => $treeName,
+        'tree_nodes' => null, // Placeholder
+        'created' => $now,
+        'modified' => $now,
+        'enabled' => 1,
+      ]);
+      
+      $treeId = (int)db()->lastInsertId();
+      
+      try {
+        parse_and_import_gedcom($file['tmp_name'], $treeId, (int)$user['id']);
+        jsonResponse(true, 'GEDCOM súbor bol úspešne importovaný.');
+      } catch (Exception $e) {
+        // If parsing fails, we might want to delete the tree or just warn
+        error_log('GEDCOM Import Error: ' . $e->getMessage());
+        jsonResponse(false, 'Chyba pri spracovaní GEDCOM súboru: ' . $e->getMessage());
+      }
+    }
     elseif ($action === 'delete') {
       $id = (int) ($_POST['id'] ?? 0);
       $stmt = db()->prepare('DELETE FROM family_trees WHERE id = :id AND owner = :owner');
@@ -186,15 +239,38 @@ if ($isModal) {
         </div>
 
         <h2 class="section-subtitle">Vytvoriť nový rodokmeň</h2>
-        <form id="create-tree-form" onsubmit="return false;">
-          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-          <input type="hidden" name="action" value="create">
-          <div class="form-group">
-            <label for="tree_name">Názov rodokmeňa</label>
-            <input class="form-control" type="text" id="tree_name" name="tree_name" maxlength="255" required>
+        
+        <div class="create-options">
+          <!-- Manual Creation -->
+          <div class="create-option">
+            <h3>Manuálne vytvorenie</h3>
+            <form id="create-tree-form" onsubmit="return false;">
+              <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="action" value="create">
+              <div class="form-group">
+                <label for="tree_name">Názov rodokmeňa</label>
+                <input class="form-control" type="text" id="tree_name" name="tree_name" maxlength="255" required>
+              </div>
+              <button class="btn-primary btn-large" type="submit">Vytvoriť rodokmeň</button>
+            </form>
           </div>
-          <button class="btn-primary btn-large" type="submit">Vytvoriť rodokmeň</button>
-        </form>
+
+          <div class="divider-vertical">alebo</div>
+
+          <!-- GEDCOM Import -->
+          <div class="create-option">
+            <h3>Import z GEDCOM</h3>
+            <form id="import-gedcom-form" onsubmit="return false;" enctype="multipart/form-data">
+              <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+              <input type="hidden" name="action" value="import_gedcom">
+              <div class="form-group">
+                <label for="gedcom_file">Vyberte .ged súbor</label>
+                <input class="form-control" type="file" id="gedcom_file" name="gedcom_file" accept=".ged" required>
+              </div>
+              <button class="btn-secondary btn-large" type="submit">Importovať GEDCOM</button>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -220,15 +296,38 @@ render_header('Moje rodokmene');
     </div>
 
     <h2 class="section-subtitle">Vytvoriť nový rodokmeň</h2>
-    <form id="create-tree-form-page" method="post" action="/family-trees.php">
-      <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-      <input type="hidden" name="action" value="create">
-      <div class="form-group">
-        <label for="tree_name">Názov rodokmeňa</label>
-        <input class="form-control" type="text" id="tree_name_page" name="tree_name" maxlength="255" required>
+    
+    <div class="create-options">
+      <!-- Manual Creation -->
+      <div class="create-option">
+        <h3>Manuálne vytvorenie</h3>
+        <form id="create-tree-form-page" method="post" action="/family-trees.php">
+          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+          <input type="hidden" name="action" value="create">
+          <div class="form-group">
+            <label for="tree_name">Názov rodokmeňa</label>
+            <input class="form-control" type="text" id="tree_name_page" name="tree_name" maxlength="255" required>
+          </div>
+          <button class="btn-primary btn-large" type="submit">Vytvoriť rodokmeň</button>
+        </form>
       </div>
-      <button class="btn-primary btn-large" type="submit">Vytvoriť rodokmeň</button>
-    </form>
+
+      <div class="divider-vertical">alebo</div>
+
+      <!-- GEDCOM Import -->
+      <div class="create-option">
+        <h3>Import z GEDCOM</h3>
+        <form id="import-gedcom-form-page" method="post" action="/family-trees.php" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+          <input type="hidden" name="action" value="import_gedcom">
+          <div class="form-group">
+            <label for="gedcom_file_page">Vyberte .ged súbor</label>
+            <input class="form-control" type="file" id="gedcom_file_page" name="gedcom_file" accept=".ged" required>
+          </div>
+          <button class="btn-secondary btn-large" type="submit">Importovať GEDCOM</button>
+        </form>
+      </div>
+    </div>
   </div>
 </div>
 <?php

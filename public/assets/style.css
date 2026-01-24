@@ -741,8 +741,86 @@ body {
   color: var(--text-primary);
 }
 
+/* Create Options (Manual vs Import) */
+.create-options {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  margin-top: 24px;
+}
+
+.create-option {
+  flex: 1;
+  background: var(--bg-secondary);
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.create-option h3 {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.divider-vertical {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.9rem;
+  position: relative;
+}
+
+.divider-vertical::before,
+.divider-vertical::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  background: var(--border-color);
+  height: 40%;
+}
+
+.divider-vertical::before {
+  top: 0;
+}
+
+.divider-vertical::after {
+  bottom: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
+  .create-options {
+    flex-direction: column;
+    gap: 24px;
+  }
+  
+  .divider-vertical {
+    width: 100%;
+    height: auto;
+    margin: 8px 0;
+  }
+  
+  .divider-vertical::before,
+  .divider-vertical::after {
+    width: 40%;
+    height: 1px;
+    top: 50%;
+    left: auto;
+  }
+  
+  .divider-vertical::before {
+    left: 0;
+  }
+  
+  .divider-vertical::after {
+    right: 0;
+  }
+
   .nav-menu,
   .nav-auth {
     display: none;

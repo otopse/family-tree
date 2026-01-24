@@ -130,6 +130,15 @@ function initFamilyTreesModal(overlay) {
     });
   }
 
+  // Attach Import Form Handler
+  const importForm = overlay.querySelector('#import-gedcom-form');
+  if (importForm) {
+    importForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      handleTreeFormSubmit(importForm, true);
+    });
+  }
+
   // Attach Actions (Edit/Rename, Delete) handlers via delegation
   const treesContainer = overlay.querySelector('#trees-container');
   if (treesContainer) {
