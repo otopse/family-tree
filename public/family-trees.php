@@ -141,6 +141,8 @@ function renderTreeList(array $trees): void {
             <td class="meta-col"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></td>
             <td class="meta-col"><?= e(date('d.m.Y H:i', strtotime($tree['modified']))) ?></td>
             <td class="actions-col">
+              <a href="/view-tree.php?id=<?= $tree['id'] ?>" class="btn-icon" title="Vykresliť rodokmeň">👁️</a>
+              <a href="/edit-tree.php?id=<?= $tree['id'] ?>" class="btn-icon" title="Editovať rodokmeň">👥</a>
               <button type="button" class="btn-icon edit-tree" data-id="<?= $tree['id'] ?>" title="Premenovať">✏️</button>
               <button type="button" class="btn-icon delete-tree" data-id="<?= $tree['id'] ?>" title="Zmazať" onclick="deleteTree(<?= $tree['id'] ?>)">🗑️</button>
             </td>

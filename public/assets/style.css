@@ -697,7 +697,7 @@ body {
 .actions-col {
   text-align: center;
   white-space: nowrap;
-  width: 100px;
+  min-width: 140px;
 }
 
 .btn-icon {
@@ -709,6 +709,10 @@ body {
   border-radius: 4px;
   transition: background-color 0.2s;
   opacity: 0.8;
+  text-decoration: none;
+  display: inline-block;
+  color: inherit;
+  line-height: 1.2;
 }
 
 .btn-icon:hover {
