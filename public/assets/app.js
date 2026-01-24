@@ -107,6 +107,18 @@ function openFamilyTreesModal() {
           }
         });
       });
+      
+      // Execute any scripts in the loaded HTML
+      const scripts = overlay.querySelectorAll('script');
+      scripts.forEach(oldScript => {
+        const newScript = document.createElement('script');
+        Array.from(oldScript.attributes).forEach(attr => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      });
+      
       // Show modal
       setTimeout(() => overlay.classList.add('active'), 10);
     })

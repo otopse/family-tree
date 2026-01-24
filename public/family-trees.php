@@ -41,8 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $success = true;
       flash('success', 'Rodokmeň bol úspešne vytvorený.');
       
-      // Redirect to avoid resubmission
-      redirect('/family-trees.php?modal=1');
+      // For modal requests, don't redirect - let AJAX handle it
+      if (!empty($_GET['modal']) || (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')) {
+        // This will be handled by AJAX, just continue to render
+      } else {
+        // Redirect to avoid resubmission for regular page requests
+        redirect('/family-trees.php');
+      }
     } catch (PDOException $e) {
       error_log('Family trees insert error: ' . $e->getMessage());
       if (strpos($e->getMessage(), "doesn't exist") !== false || strpos($e->getMessage(), 'Table') !== false) {
@@ -145,7 +150,7 @@ if ($isModal) {
         <?php endif; ?>
 
         <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 16px; margin-top: 32px;">Vytvoriť nový rodokmeň</h2>
-        <form method="post" action="/family-trees.php?modal=1">
+        <form method="post" action="/family-trees.php?modal=1" id="create-tree-form">
           <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
           <div class="form-group">
             <label for="tree_name">Názov rodokmeňa</label>
@@ -170,6 +175,101 @@ if ($isModal) {
         closeFamilyTreesModal();
       }
     });
+    
+    // Handle form submission via AJAX
+    const form = document.getElementById('create-tree-form');
+    if (form) {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Vytváram...';
+        
+        fetch('/family-trees.php?modal=1', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        })
+        .then(response => response.text())
+        .then(html => {
+          // Reload modal content
+          const modal = document.getElementById('family-trees-modal');
+          if (modal) {
+            modal.innerHTML = html;
+            // Re-attach event listeners
+            attachModalListeners();
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Chyba pri vytváraní rodokmeňa. Skúste to znova.');
+          submitButton.disabled = false;
+          submitButton.textContent = originalText;
+        });
+      });
+    }
+    
+    function attachModalListeners() {
+      // Re-attach close button
+      const closeBtn = document.querySelector('#family-trees-modal .modal-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          closeFamilyTreesModal();
+        });
+      }
+      
+      // Re-attach form submit handler
+      const form = document.getElementById('create-tree-form');
+      if (form) {
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          
+          const formData = new FormData(form);
+          const submitButton = form.querySelector('button[type="submit"]');
+          const originalText = submitButton.textContent;
+          submitButton.disabled = true;
+          submitButton.textContent = 'Vytváram...';
+          
+          fetch('/family-trees.php?modal=1', {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          })
+          .then(response => response.text())
+          .then(html => {
+            const modal = document.getElementById('family-trees-modal');
+            if (modal) {
+              modal.innerHTML = html;
+              attachModalListeners();
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            alert('Chyba pri vytváraní rodokmeňa. Skúste to znova.');
+            submitButton.disabled = false;
+            submitButton.textContent = originalText;
+          });
+        });
+      }
+      
+      // Re-attach alert close buttons
+      document.querySelectorAll('#family-trees-modal .alert-close').forEach(button => {
+        button.addEventListener('click', function() {
+          const alert = this.closest('.alert');
+          if (alert) {
+            alert.remove();
+          }
+        });
+      });
+    }
   </script>
   <?php
   exit;
