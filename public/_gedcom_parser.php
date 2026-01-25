@@ -20,6 +20,11 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
     
     $lines = explode("\n", $content);
 
+    $debugLog = __DIR__ . '/../gedcom_debug.log';
+    file_put_contents($debugLog, "Starting import for tree $treeId\n");
+    file_put_contents($debugLog, "Content length: " . strlen($content) . "\n", FILE_APPEND);
+    file_put_contents($debugLog, "Line count: " . count($lines) . "\n", FILE_APPEND);
+
     $individuals = [];
     $families = [];
     $currentRecord = null;
@@ -34,6 +39,7 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
         // Example: 0 @I1@ INDI
         // Example: 1 NAME Jan /Novak/
         if (!preg_match('/^(\d+)\s+(@\w+@)?\s*(\w+)(?:\s+(.*))?$/', $line, $matches)) {
+            file_put_contents($debugLog, "Regex failed for line: $line\n", FILE_APPEND);
             continue;
         }
 
@@ -111,10 +117,14 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
         }
     }
 
+    file_put_contents($debugLog, "Individuals found: " . count($individuals) . "\n", FILE_APPEND);
+    file_put_contents($debugLog, "Families found: " . count($families) . "\n", FILE_APPEND);
+
     // Import into DB
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
 
     foreach ($families as $famId => $fam) {
+        file_put_contents($debugLog, "Processing family: $famId\n", FILE_APPEND);
         $husbId = $fam['husb'] ?? null;
         $wifeId = $fam['wife'] ?? null;
         $childrenIds = $fam['children'] ?? [];
@@ -126,12 +136,13 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
         $pattern .= str_repeat('D', count($childrenIds));
 
         // Create Record (Family)
-        $stmt = db()->prepare(
-            'INSERT INTO ft_records (tree_id, owner, record_name, pattern, created, modified, enabled)
-             VALUES (:tree_id, :owner, :name, :pattern, :created, :modified, 1)'
-        );
-        
-        // Determine record name (Husb Name + Wife Name)
+        try {
+            $stmt = db()->prepare(
+                'INSERT INTO ft_records (tree_id, owner, record_name, pattern, created, modified, enabled)
+                 VALUES (:tree_id, :owner, :name, :pattern, :created, :modified, 1)'
+            );
+            
+            // Determine record name (Husb Name + Wife Name)
         $recName = 'Rodina';
         $hName = $husbId && isset($individuals[$husbId]) ? $individuals[$husbId]['name'] ?? '' : '';
         $wName = $wifeId && isset($individuals[$wifeId]) ? $individuals[$wifeId]['name'] ?? '' : '';
@@ -140,14 +151,19 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
             $recName = trim("$hName & $wName", " &");
         }
 
-        $stmt->execute([
-            'tree_id' => $treeId,
-            'owner' => $ownerId,
-            'name' => $recName,
-            'pattern' => $pattern,
-            'created' => $now,
-            'modified' => $now
-        ]);
+            $stmt->execute([
+                'tree_id' => $treeId,
+                'owner' => $ownerId,
+                'name' => $recName,
+                'pattern' => $pattern,
+                'created' => $now,
+                'modified' => $now
+            ]);
+            file_put_contents($debugLog, "Inserted record for family $famId\n", FILE_APPEND);
+        } catch (Exception $e) {
+            file_put_contents($debugLog, "Error inserting family $famId: " . $e->getMessage() . "\n", FILE_APPEND);
+            throw $e;
+        }
         
         $recordId = (int)db()->lastInsertId();
 
