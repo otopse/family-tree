@@ -20,6 +20,29 @@ if (!$tree) {
   redirect('/family-trees.php');
 }
 
+// Handle actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $action = $_POST['action'] ?? '';
+  
+  if ($action === 'add_record') {
+    $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+    $stmt = db()->prepare(
+      'INSERT INTO ft_records (tree_id, owner, record_name, pattern, created, modified, enabled)
+       VALUES (:tree_id, :owner, :name, :pattern, :created, :modified, 1)'
+    );
+    $stmt->execute([
+      'tree_id' => $treeId,
+      'owner' => $user['id'],
+      'name' => 'Nová rodina',
+      'pattern' => '',
+      'created' => $now,
+      'modified' => $now
+    ]);
+    flash('success', 'Nový záznam bol vytvorený.');
+    redirect('/edit-tree.php?id=' . $treeId);
+  }
+}
+
 // Fetch records for this tree
 $records = [];
 $elements = [];
@@ -94,7 +117,10 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   <!-- Record View Section -->
   <div id="record-view" class="view-section active">
     <div class="toolbar">
-      <button class="btn-primary">+ Pridať nový záznam</button>
+      <form method="post" action="/edit-tree.php?id=<?= $treeId ?>">
+        <input type="hidden" name="action" value="add_record">
+        <button type="submit" class="btn-primary">+ Pridať nový záznam</button>
+      </form>
       <div class="search-box">
         <input type="text" placeholder="Hľadať..." class="form-control" style="width: 200px;">
       </div>
@@ -137,11 +163,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
                   <?php if ($man): ?>
                     <div class="person-cell">
                       <span class="person-icon">👨</span>
-                      <span class="person-info"><?= format_element($man) ?></span>
                       <div class="person-actions">
                         <button class="btn-tiny" title="Editovať">✏️</button>
                         <button class="btn-tiny" title="Zmazať">🗑️</button>
                       </div>
+                      <span class="person-info"><?= format_element($man) ?></span>
                     </div>
                   <?php else: ?>
                     <button class="btn-dashed">+ Pridať muža</button>
@@ -151,11 +177,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
                   <?php if ($woman): ?>
                     <div class="person-cell">
                       <span class="person-icon">👩</span>
-                      <span class="person-info"><?= format_element($woman) ?></span>
                       <div class="person-actions">
                         <button class="btn-tiny" title="Editovať">✏️</button>
                         <button class="btn-tiny" title="Zmazať">🗑️</button>
                       </div>
+                      <span class="person-info"><?= format_element($woman) ?></span>
                     </div>
                   <?php else: ?>
                     <button class="btn-dashed">+ Pridať ženu</button>
@@ -166,11 +192,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
                     <?php foreach ($children as $child): ?>
                       <div class="person-cell child-cell">
                         <span class="person-icon">👶</span>
-                        <span class="person-info"><?= format_element($child) ?></span>
                         <div class="person-actions">
                           <button class="btn-tiny" title="Editovať">✏️</button>
                           <button class="btn-tiny" title="Zmazať">🗑️</button>
                         </div>
+                        <span class="person-info"><?= format_element($child) ?></span>
                       </div>
                     <?php endforeach; ?>
                     <button class="btn-dashed btn-small">+ Dieťa</button>
@@ -307,22 +333,20 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     position: relative;
   }
 
-  .person-cell:hover .person-actions {
+  .person-cell .person-actions {
     display: flex;
+    margin-left: 8px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
   }
 
-  .person-icon {
-    font-size: 1.2rem;
-  }
-
-  .person-info {
-    font-size: 0.9rem;
+  .person-cell:hover .person-actions {
+    opacity: 1;
   }
 
   .person-actions {
-    display: none;
+    display: flex;
     gap: 4px;
-    margin-left: auto;
   }
 
   .btn-tiny {
