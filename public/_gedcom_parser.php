@@ -20,7 +20,7 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
     
     $lines = explode("\n", $content);
 
-    $debugLog = __DIR__ . '/../gedcom_debug.log';
+    $debugLog = __DIR__ . '/gedcom_debug.log';
     file_put_contents($debugLog, "Starting import for tree $treeId\n");
     file_put_contents($debugLog, "Content length: " . strlen($content) . "\n", FILE_APPEND);
     file_put_contents($debugLog, "Line count: " . count($lines) . "\n", FILE_APPEND);
@@ -119,6 +119,10 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
 
     file_put_contents($debugLog, "Individuals found: " . count($individuals) . "\n", FILE_APPEND);
     file_put_contents($debugLog, "Families found: " . count($families) . "\n", FILE_APPEND);
+    
+    if (empty($families)) {
+        file_put_contents($debugLog, "No families found. Dumping individuals keys: " . implode(', ', array_keys($individuals)) . "\n", FILE_APPEND);
+    }
 
     // Import into DB
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
