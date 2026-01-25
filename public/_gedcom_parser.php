@@ -11,12 +11,23 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
         throw new Exception("Cannot read GEDCOM file.");
     }
 
+    // Detect and handle encoding (BOM)
+    $bom2 = substr($content, 0, 2);
+    $bom3 = substr($content, 0, 3);
+
+    if ($bom3 === "\xEF\xBB\xBF") {
+        // UTF-8 BOM
+        $content = substr($content, 3);
+    } elseif ($bom2 === "\xFF\xFE") {
+        // UTF-16LE
+        $content = mb_convert_encoding($content, 'UTF-8', 'UTF-16LE');
+    } elseif ($bom2 === "\xFE\xFF") {
+        // UTF-16BE
+        $content = mb_convert_encoding($content, 'UTF-8', 'UTF-16BE');
+    }
+
     // Normalize line endings
     $content = str_replace(["\r\n", "\r"], "\n", $content);
-    
-    // Remove BOM if present
-    $bom = pack('H*','EFBBBF');
-    $content = preg_replace("/^$bom/", '', $content);
     
     $lines = explode("\n", $content);
 
