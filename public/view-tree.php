@@ -24,7 +24,7 @@ if (!$tree) {
 
 // Fetch all records and elements
 $stmt = db()->prepare('
-    SELECT r.id as record_id, r.record_name, e.id as element_id, e.type, e.full_name, e.gedcom_id, e.gender, e.birth_date, e.death_date
+    SELECT r.id as record_id, r.record_name, e.id as element_id, e.type, e.full_name, e.gedcom_id, e.gender, e.birth_date, e.death_date, e.birth_place, e.death_place
     FROM ft_records r
     JOIN ft_elements e ON r.id = e.record_id
     WHERE r.tree_id = :tree_id
@@ -33,327 +33,406 @@ $stmt = db()->prepare('
 $stmt->execute(['tree_id' => $treeId]);
 $rows = $stmt->fetchAll();
 
-// Build structure
+$individuals = [];
 $families = [];
-$individuals = []; // Map gedcom_id -> info
-$childrenMap = []; // Map gedcom_id (child) -> family_id (where they are child)
-$parentMap = [];   // Map gedcom_id (parent) -> list of family_ids (where they are parent)
+$parentMap = [];
+
+// Helper to extract year
+function extractYear(?string $date): ?int {
+    if (!$date) return null;
+    if (preg_match('/(\d{4})/', $date, $matches)) {
+        return (int)$matches[1];
+    }
+    return null;
+}
 
 foreach ($rows as $row) {
     $famId = $row['record_id'];
-    if (!isset($families[$famId])) {
-        $families[$famId] = [
-            'id' => $famId,
-            'name' => $row['record_name'],
-            'husb' => null,
-            'wife' => null,
-            'children' => []
+    
+    // Process Individual
+    if ($row['gedcom_id'] && !isset($individuals[$row['gedcom_id']])) {
+        $bYear = extractYear($row['birth_date']);
+        $dYear = extractYear($row['death_date']);
+        
+        // Sanity check/Defaults
+        if (!$bYear && $dYear) $bYear = $dYear - 60;
+        if (!$bYear) $bYear = 1900; // Fallback
+        if (!$dYear) $dYear = $bYear + 70; // Assumed lifespan if unknown
+        
+        $individuals[$row['gedcom_id']] = [
+            'id' => $row['gedcom_id'],
+            'name' => $row['full_name'],
+            'gender' => $row['gender'],
+            'birthYear' => $bYear,
+            'deathYear' => $dYear,
+            'birthDate' => $row['birth_date'],
+            'deathDate' => $row['death_date'],
+            'birthPlace' => $row['birth_place'],
+            'deathPlace' => $row['death_place']
         ];
     }
 
-    $person = [
-        'id' => $row['element_id'],
-        'name' => $row['full_name'],
-        'gedcom_id' => $row['gedcom_id'],
-        'gender' => $row['gender'],
-        'birth' => $row['birth_date'],
-        'death' => $row['death_date']
-    ];
-
-    if ($row['gedcom_id']) {
-        $individuals[$row['gedcom_id']] = $person;
+    // Build Family links
+    if (!isset($families[$famId])) {
+        $families[$famId] = ['husb' => null, 'wife' => null, 'children' => []];
     }
 
     if ($row['type'] === 'MUZ') {
-        $families[$famId]['husb'] = $person;
-        if ($row['gedcom_id']) {
-            $parentMap[$row['gedcom_id']][] = $famId;
-        }
+        $families[$famId]['husb'] = $row['gedcom_id'];
     } elseif ($row['type'] === 'ZENA') {
-        $families[$famId]['wife'] = $person;
-        if ($row['gedcom_id']) {
-            $parentMap[$row['gedcom_id']][] = $famId;
-        }
+        $families[$famId]['wife'] = $row['gedcom_id'];
     } elseif ($row['type'] === 'DIETA') {
-        $families[$famId]['children'][] = $person;
+        $families[$famId]['children'][] = $row['gedcom_id'];
         if ($row['gedcom_id']) {
-            $childrenMap[$row['gedcom_id']] = $famId;
+            $parentMap[$row['gedcom_id']] = $famId;
         }
     }
 }
 
-// Find root families (families where parents are not children in any other family)
-$rootFamilies = [];
-foreach ($families as $famId => $fam) {
-    $isRoot = true;
-    if ($fam['husb'] && isset($childrenMap[$fam['husb']['gedcom_id']])) $isRoot = false;
-    if ($fam['wife'] && isset($childrenMap[$fam['wife']['gedcom_id']])) $isRoot = false;
-    
-    if ($isRoot) {
-        $rootFamilies[] = $famId;
+// Filter families to only those with connections
+$cleanFamilies = [];
+foreach ($families as $id => $fam) {
+    if (($fam['husb'] || $fam['wife']) && !empty($fam['children'])) {
+        $cleanFamilies[] = $fam;
     }
-}
-
-// If no root found (circular?), just pick the first one
-if (empty($rootFamilies) && !empty($families)) {
-    $rootFamilies[] = array_key_first($families);
 }
 
 render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
 ?>
 
 <style>
-    .tree-container {
+    body {
+        margin: 0;
+        overflow: hidden; /* Main scroll handled by container */
+    }
+    #tree-wrapper {
+        width: 100vw;
+        height: calc(100vh - 100px); /* Adjust for header */
         overflow: auto;
-        padding: 20px;
-        background: #f5f5f5;
-        min-height: 500px;
-    }
-    
-    .tf-tree {
-        display: flex;
-        flex-direction: row;
-    }
-
-    .tf-tree ul {
-        display: flex;
-        padding-top: 20px;
         position: relative;
-        transition: all 0.5s;
-        -webkit-transition: all 0.5s;
-        -moz-transition: all 0.5s;
+        background-color: #fdfdfd;
+        border-top: 1px solid #ddd;
     }
-
-    .tf-tree li {
-        float: left;
-        text-align: center;
-        list-style-type: none;
-        position: relative;
-        padding: 20px 5px 0 5px;
-        transition: all 0.5s;
-        -webkit-transition: all 0.5s;
-        -moz-transition: all 0.5s;
+    #tree-svg {
+        display: block;
     }
-
-    /* Connectors */
-    .tf-tree li::before, .tf-tree li::after {
-        content: '';
-        position: absolute; top: 0; right: 50%;
-        border-top: 1px solid #ccc;
-        width: 50%; height: 20px;
+    .person-box {
+        cursor: pointer;
+        filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));
+        transition: filter 0.2s;
     }
-    .tf-tree li::after {
-        right: auto; left: 50%;
-        border-left: 1px solid #ccc;
+    .person-box:hover {
+        filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.3));
     }
-
-    .tf-tree li:only-child::after, .tf-tree li:only-child::before {
-        display: none;
+    .person-rect {
+        stroke: #999;
+        stroke-width: 1;
     }
-
-    .tf-tree li:only-child { padding-top: 0; }
-
-    .tf-tree li:first-child::before, .tf-tree li:last-child::after {
-        border: 0 none;
+    .person-rect.male {
+        fill: #e6f7ff;
+        stroke: #91d5ff;
     }
-    
-    .tf-tree li:last-child::before {
-        border-right: 1px solid #ccc;
-        border-radius: 0 5px 0 0;
-        -webkit-border-radius: 0 5px 0 0;
-        -moz-border-radius: 0 5px 0 0;
+    .person-rect.female {
+        fill: #fff0f6;
+        stroke: #ffadd2;
     }
-    .tf-tree li:first-child::after {
-        border-radius: 5px 0 0 0;
-        -webkit-border-radius: 5px 0 0 0;
-        -moz-border-radius: 5px 0 0 0;
-    }
-
-    .tf-tree ul ul::before {
-        content: '';
-        position: absolute; top: 0; left: 50%;
-        border-left: 1px solid #ccc;
-        width: 0; height: 20px;
-    }
-
-    /* Container for Couple to ensure they stay together */
-    .couple-wrapper {
-        display: inline-flex;
-        align-items: center;
-        background: #fff;
-        border: 1px solid #ccc;
-        padding: 5px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        position: relative;
-        z-index: 2;
-    }
-
-    .tf-node {
-        border: 1px solid #ccc;
-        padding: 8px 12px;
-        text-decoration: none;
-        color: #666;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-size: 13px;
-        display: inline-block;
-        border-radius: 4px;
-        background: white;
-        min-width: 140px;
-        text-align: left;
-        margin: 0 5px;
-    }
-
-    .tf-node.male { 
-        background-color: #f0f7ff; 
-        border-color: #1890ff; 
-        border-left-width: 4px;
-    }
-    .tf-node.female { 
-        background-color: #fff0f6; 
-        border-color: #eb2f96; 
-        border-left-width: 4px;
-    }
-    
-    .tf-node strong { 
-        display: block; 
-        font-size: 14px; 
-        margin-bottom: 4px; 
-        color: #2c3e50; 
+    .person-name {
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 12px;
         font-weight: 600;
+        fill: #333;
     }
-    
-    .tf-node .dates { 
-        font-size: 11px; 
-        color: #888; 
-        margin-top: 2px;
+    .person-dates {
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 10px;
+        fill: #666;
     }
-
-    .spouse-divider {
-        width: 15px;
-        height: 1px;
-        background: #999;
-        margin: 0 2px;
+    .id-badge {
+        fill: black;
+    }
+    .id-text {
+        fill: white;
+        font-size: 9px;
+        font-family: monospace;
+        font-weight: bold;
+        text-anchor: middle;
+        dominant-baseline: central;
+    }
+    .connection-line {
+        fill: none;
+        stroke: #1890ff;
+        stroke-width: 1.5;
+        stroke-opacity: 0.4;
+    }
+    .grid-line {
+        stroke: #eee;
+        stroke-width: 1;
+    }
+    .grid-text {
+        fill: #aaa;
+        font-size: 12px;
+        font-family: sans-serif;
     }
 </style>
 
-<div class="container-fluid">
-    <div class="card">
-        <div class="card-header">
-            <h1><?= e($tree['tree_name']) ?></h1>
-            <div class="actions">
-                <a href="/family-trees.php" class="btn btn-secondary">Späť na zoznam</a>
-            </div>
+<div class="container-fluid p-0">
+    <div class="d-flex justify-content-between align-items-center p-3 bg-white border-bottom">
+        <h4 class="m-0"><?= e($tree['tree_name']) ?></h4>
+        <div>
+            <a href="/family-trees.php" class="btn btn-sm btn-outline-secondary">Späť</a>
         </div>
-        <div class="card-body tree-container">
-            <div class="tf-tree">
-                <ul>
-                    <?php
-                    // Recursive function to render tree
-                    function renderNode($person, $families, $parentMap, $individuals) {
-                        if (!$person) return;
-                        
-                        echo '<li>';
-                        
-                        // Begin Couple Wrapper
-                        echo '<div class="couple-wrapper">';
-                        
-                        // Render Primary Person
-                        renderPersonCard($person);
-                        
-                        // Check if this person is a parent in any family (find spouse)
-                        $spouse = null;
-                        $children = [];
-                        
-                        if ($person['gedcom_id'] && isset($parentMap[$person['gedcom_id']])) {
-                            // We might have multiple families (marriages), but for this simple tree we usually pick the first one
-                            // or loop through them. Standard vertical trees handle multiple spouses poorly without complex logic.
-                            // We will take the first family for now.
-                            foreach ($parentMap[$person['gedcom_id']] as $famId) {
-                                $fam = $families[$famId];
-                                
-                                if ($fam['husb'] && $fam['husb']['gedcom_id'] !== $person['gedcom_id']) $spouse = $fam['husb'];
-                                if ($fam['wife'] && $fam['wife']['gedcom_id'] !== $person['gedcom_id']) $spouse = $fam['wife'];
-                                
-                                $children = $fam['children'];
-                                break; // Only first family
-                            }
-                        }
-                        
-                        if ($spouse) {
-                            echo '<div class="spouse-divider"></div>';
-                            // Get full spouse info if available
-                            if ($spouse['gedcom_id'] && isset($individuals[$spouse['gedcom_id']])) {
-                                $spouse = $individuals[$spouse['gedcom_id']];
-                            }
-                            renderPersonCard($spouse);
-                        }
-                        
-                        echo '</div>'; // End Couple Wrapper
-                        
-                        // Render Children
-                        if (!empty($children)) {
-                            echo '<ul>';
-                            foreach ($children as $child) {
-                                $childFull = $child;
-                                if ($child['gedcom_id'] && isset($individuals[$child['gedcom_id']])) {
-                                    $childFull = $individuals[$child['gedcom_id']];
-                                }
-                                renderNode($childFull, $families, $parentMap, $individuals);
-                            }
-                            echo '</ul>';
-                        }
-                        
-                        echo '</li>';
-                    }
-
-                    function renderPersonCard($person) {
-                        $genderClass = ($person['gender'] === 'M') ? 'male' : (($person['gender'] === 'F') ? 'female' : '');
-                        echo '<div class="tf-node ' . $genderClass . '">';
-                        echo '<strong>' . e($person['name']) . '</strong>';
-                        if ($person['birth'] || $person['death']) {
-                            echo '<div class="dates">';
-                            echo e($person['birth'] ? date('Y', strtotime($person['birth'])) : '');
-                            echo ' - ';
-                            echo e($person['death'] ? date('Y', strtotime($person['death'])) : '');
-                            echo '</div>';
-                        }
-                        echo '</div>';
-                    }
-
-                    // Render Root Families
-                    foreach ($rootFamilies as $famId) {
-                        $fam = $families[$famId];
-                        $husb = $fam['husb'];
-                        $wife = $fam['wife'];
-                        
-                        echo '<li>';
-                        echo '<div class="couple-wrapper">';
-                        
-                        if ($husb) renderPersonCard($husb);
-                        if ($husb && $wife) echo '<div class="spouse-divider"></div>';
-                        if ($wife) renderPersonCard($wife);
-                        
-                        echo '</div>';
-                        
-                        if (!empty($fam['children'])) {
-                            echo '<ul>';
-                            foreach ($fam['children'] as $child) {
-                                $childFull = $child;
-                                if ($child['gedcom_id'] && isset($individuals[$child['gedcom_id']])) {
-                                    $childFull = $individuals[$child['gedcom_id']];
-                                }
-                                renderNode($childFull, $families, $parentMap, $individuals);
-                            }
-                            echo '</ul>';
-                        }
-                        echo '</li>';
-                    }
-                    ?>
-                </ul>
-            </div>
-        </div>
+    </div>
+    
+    <div id="tree-wrapper">
+        <div id="loading" style="padding: 20px;">Načítavam graf...</div>
     </div>
 </div>
 
-<?php render_footer(); ?>
+<script>
+    const individuals = <?= json_encode(array_values($individuals)) ?>;
+    const families = <?= json_encode($cleanFamilies) ?>;
+    
+    // Config
+    const CONFIG = {
+        pixelsPerYear: 10,
+        rowHeight: 50,
+        boxHeight: 36,
+        minYear: 1800,
+        maxYear: 2050,
+        paddingX: 50,
+        paddingY: 50
+    };
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        initTree();
+    });
+
+    function initTree() {
+        const wrapper = document.getElementById('tree-wrapper');
+        const loading = document.getElementById('loading');
+        
+        // 1. Calculate Layout
+        // Assign sequential IDs (1, 2, 3...) for display
+        individuals.forEach((ind, index) => {
+            ind.displayId = index + 1;
+        });
+
+        // Determine X range
+        let minDataYear = Math.min(...individuals.map(i => i.birthYear));
+        let maxDataYear = Math.max(...individuals.map(i => i.deathYear));
+        CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
+        CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 20;
+
+        // Assign Rows (Greedy packing algorithm)
+        // Sort by birth year to pack from left to right
+        const sortedInds = [...individuals].sort((a, b) => a.birthYear - b.birthYear);
+        const rows = []; // Array of endYears
+
+        sortedInds.forEach(ind => {
+            // Find first row where this person fits
+            let rowIndex = -1;
+            for (let r = 0; r < rows.length; r++) {
+                if (rows[r] < ind.birthYear) {
+                    rowIndex = r;
+                    break;
+                }
+            }
+
+            if (rowIndex === -1) {
+                // New row
+                rowIndex = rows.length;
+                rows.push(ind.deathYear + 5); // +5 years buffer
+            } else {
+                rows[rowIndex] = ind.deathYear + 5;
+            }
+
+            ind.rowIndex = rowIndex;
+        });
+
+        const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
+        const totalHeight = (rows.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
+
+        // 2. Build SVG
+        const ns = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(ns, "svg");
+        svg.setAttribute("width", totalWidth);
+        svg.setAttribute("height", totalHeight);
+        svg.id = "tree-svg";
+
+        // Draw Grid
+        const gridGroup = document.createElementNS(ns, "g");
+        for (let y = CONFIG.minYear; y <= CONFIG.maxYear; y += 10) {
+            const x = getX(y);
+            
+            const line = document.createElementNS(ns, "line");
+            line.setAttribute("x1", x);
+            line.setAttribute("y1", 0);
+            line.setAttribute("x2", x);
+            line.setAttribute("y2", totalHeight);
+            line.setAttribute("class", "grid-line");
+            if (y % 50 === 0) line.style.strokeWidth = "2";
+            gridGroup.appendChild(line);
+
+            if (y % 50 === 0) {
+                const text = document.createElementNS(ns, "text");
+                text.setAttribute("x", x + 5);
+                text.setAttribute("y", 20);
+                text.setAttribute("class", "grid-text");
+                text.textContent = y;
+                gridGroup.appendChild(text);
+            }
+        }
+        svg.appendChild(gridGroup);
+
+        // Draw Connections
+        // Map individual GedcomID to Object for easy lookup
+        const indMap = {};
+        individuals.forEach(i => indMap[i.id] = i);
+
+        const connectionsGroup = document.createElementNS(ns, "g");
+        
+        families.forEach(fam => {
+            const children = fam.children || [];
+            if (children.length === 0) return;
+
+            // Parents
+            const husb = fam.husb ? indMap[fam.husb] : null;
+            const wife = fam.wife ? indMap[fam.wife] : null;
+
+            // Start point (Average of parents if both exist, otherwise just one)
+            let startX, startY;
+            if (husb && wife) {
+                startX = (getX(husb.deathYear) + getX(wife.birthYear)) / 2; // Midpoint X roughly
+                // Better: Use actual box centers
+                const hCX = getX(husb.birthYear) + (getWidth(husb) / 2);
+                const hCY = getY(husb) + (CONFIG.boxHeight / 2);
+                const wCX = getX(wife.birthYear) + (getWidth(wife) / 2);
+                const wCY = getY(wife) + (CONFIG.boxHeight / 2);
+                
+                startX = (hCX + wCX) / 2;
+                startY = (hCY + wCY) / 2;
+            } else if (husb) {
+                startX = getX(husb.birthYear) + (getWidth(husb) / 2);
+                startY = getY(husb) + (CONFIG.boxHeight / 2);
+            } else if (wife) {
+                startX = getX(wife.birthYear) + (getWidth(wife) / 2);
+                startY = getY(wife) + (CONFIG.boxHeight / 2);
+            } else {
+                return;
+            }
+
+            children.forEach(childId => {
+                const child = indMap[childId];
+                if (!child) return;
+
+                const endX = getX(child.birthYear);
+                const endY = getY(child) + (CONFIG.boxHeight / 2);
+
+                const path = document.createElementNS(ns, "path");
+                // Cubic Bezier: M startX startY C cp1x cp1y, cp2x cp2y, endX endY
+                // Control points: adjust curvature
+                const cp1X = startX + 50;
+                const cp1Y = startY;
+                const cp2X = endX - 50;
+                const cp2Y = endY;
+
+                const d = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+                path.setAttribute("d", d);
+                path.setAttribute("class", "connection-line");
+                connectionsGroup.appendChild(path);
+            });
+        });
+        svg.appendChild(connectionsGroup);
+
+        // Draw Individuals
+        const boxesGroup = document.createElementNS(ns, "g");
+        individuals.forEach(ind => {
+            const g = document.createElementNS(ns, "g");
+            g.setAttribute("class", "person-box");
+            g.setAttribute("transform", `translate(${getX(ind.birthYear)}, ${getY(ind)})`);
+            
+            // Box
+            const rect = document.createElementNS(ns, "rect");
+            const w = getWidth(ind);
+            const h = CONFIG.boxHeight;
+            rect.setAttribute("width", w);
+            rect.setAttribute("height", h);
+            rect.setAttribute("rx", 6); // Rounded corners
+            rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
+            g.appendChild(rect);
+
+            // ID Badge
+            const badgeSize = 16;
+            const badge = document.createElementNS(ns, "rect");
+            badge.setAttribute("x", w - badgeSize);
+            badge.setAttribute("y", 0);
+            badge.setAttribute("width", badgeSize);
+            badge.setAttribute("height", badgeSize);
+            badge.setAttribute("class", "id-badge");
+            // Rounded top-right corner only? or simple square
+            badge.setAttribute("rx", 0); 
+            g.appendChild(badge);
+
+            const idText = document.createElementNS(ns, "text");
+            idText.setAttribute("x", w - (badgeSize/2));
+            idText.setAttribute("y", badgeSize/2);
+            idText.setAttribute("class", "id-text");
+            idText.textContent = ind.displayId;
+            g.appendChild(idText);
+
+            // Name
+            const name = document.createElementNS(ns, "text");
+            name.setAttribute("x", 8);
+            name.setAttribute("y", 16);
+            name.setAttribute("class", "person-name");
+            // Truncate if too long?
+            name.textContent = ind.name.replace(/\//g, '');
+            g.appendChild(name);
+
+            // Dates
+            const dates = document.createElementNS(ns, "text");
+            dates.setAttribute("x", 8);
+            dates.setAttribute("y", 28);
+            dates.setAttribute("class", "person-dates");
+            
+            // Format places
+            let bPlace = ind.birthPlace ? ` ${ind.birthPlace}` : '';
+            let dPlace = ind.deathPlace ? ` ${ind.deathPlace}` : '';
+            // Shorten places if needed
+            
+            dates.textContent = `${ind.birthYear}${bPlace} - ${ind.deathYear}${dPlace}`;
+            g.appendChild(dates);
+            
+            // Click Handler (Highlight)
+            g.addEventListener('click', () => {
+                alert(`ID: ${ind.id}\nName: ${ind.name}`);
+            });
+
+            boxesGroup.appendChild(g);
+        });
+        svg.appendChild(boxesGroup);
+
+        // Finish
+        loading.remove();
+        wrapper.appendChild(svg);
+    }
+
+    // Helpers
+    function getX(year) {
+        return (year - CONFIG.minYear) * CONFIG.pixelsPerYear + CONFIG.paddingX;
+    }
+
+    function getY(ind) {
+        return ind.rowIndex * CONFIG.rowHeight + CONFIG.paddingY;
+    }
+
+    function getWidth(ind) {
+        let w = (ind.deathYear - ind.birthYear) * CONFIG.pixelsPerYear;
+        if (w < 120) w = 120; // Minimum width for readability
+        return w;
+    }
+
+</script>
+
+<?php // No footer needed really for full screen view, or minimal one ?>
