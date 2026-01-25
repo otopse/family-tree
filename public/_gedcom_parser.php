@@ -203,8 +203,8 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
             }
 
             $stmt = db()->prepare(
-                'INSERT INTO ft_elements (record_id, type, full_name, birth_date, birth_place, death_date, death_place, gender, sort_order)
-                 VALUES (:rid, :type, :name, :bdate, :bplace, :ddate, :dplace, :gender, :sort)'
+                'INSERT INTO ft_elements (record_id, type, full_name, birth_date, birth_place, death_date, death_place, gender, gedcom_id, sort_order)
+                 VALUES (:rid, :type, :name, :bdate, :bplace, :ddate, :dplace, :gender, :gedcom_id, :sort)'
             );
             $stmt->execute([
                 'rid' => $recordId,
@@ -215,6 +215,7 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
                 'ddate' => $dDate,
                 'dplace' => $indi['DEAT_PLAC'] ?? null,
                 'gender' => $gender,
+                'gedcom_id' => $indiId,
                 'sort' => $sortOrder
             ]);
         };

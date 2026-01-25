@@ -59,6 +59,7 @@ CREATE TABLE `ft_elements` (
   `death_date` DATE NULL,
   `death_place` VARCHAR(255) NULL,
   `gender` ENUM('M', 'F', 'U') NOT NULL DEFAULT 'U',
+  `gedcom_id` VARCHAR(50) NULL,
   `sort_order` INT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_ft_elements_record` (`record_id`),
