@@ -22,19 +22,55 @@ if (!$tree) {
 
 // Fetch records for this tree
 $records = [];
+$elements = [];
 try {
-  // We'll join elements later or fetch them separately if needed, 
-  // but for the list view, we mainly need record info. 
-  // To show "MUZ SRDIECKO ZENA...", we might need to fetch elements too.
-  // For MVP list, let's fetch basic record info first.
-  
+  // Fetch records
   $stmt = db()->prepare(
     'SELECT * FROM ft_records WHERE tree_id = :tree_id ORDER BY created DESC'
   );
   $stmt->execute(['tree_id' => $treeId]);
   $records = $stmt->fetchAll();
+
+  if (!empty($records)) {
+    // Fetch elements for these records
+    $recordIds = array_column($records, 'id');
+    $inQuery = implode(',', array_fill(0, count($recordIds), '?'));
+    $stmt = db()->prepare(
+      "SELECT * FROM ft_elements WHERE record_id IN ($inQuery) ORDER BY sort_order ASC"
+    );
+    $stmt->execute($recordIds);
+    $allElements = $stmt->fetchAll();
+
+    // Group elements by record_id
+    foreach ($allElements as $el) {
+      $elements[$el['record_id']][] = $el;
+    }
+  }
 } catch (PDOException $e) {
   // Tables might not exist yet
+}
+
+// Helper to format element display
+function format_element(array $el): string {
+  $text = e($el['full_name']);
+  
+  $dates = [];
+  if (!empty($el['birth_date'])) {
+    $b = date('Y.m.d', strtotime($el['birth_date']));
+    if (!empty($el['birth_place'])) $b .= ' ' . e($el['birth_place']);
+    $dates[] = $b;
+  }
+  if (!empty($el['death_date'])) {
+    $d = date('Y.m.d', strtotime($el['death_date']));
+    if (!empty($el['death_place'])) $d .= ' ' . e($el['death_place']);
+    $dates[] = $d;
+  }
+
+  if (!empty($dates)) {
+    $text .= ' (' . implode('-', $dates) . ')';
+  }
+
+  return $text;
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -71,32 +107,78 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
           <p>Začnite pridaním nového záznamu.</p>
         </div>
       <?php else: ?>
-        <table class="data-table">
+        <table class="data-table record-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Názov</th>
-              <th>Štruktúra (Pattern)</th>
-              <th>Obsah (Ukážka)</th>
-              <th>Akcie</th>
+              <th style="width: 50px;">ID</th>
+              <th>Muž</th>
+              <th>Žena</th>
+              <th>Deti</th>
+              <th style="width: 120px;">Akcie</th>
             </tr>
           </thead>
           <tbody>
             <?php foreach ($records as $record): ?>
+              <?php
+                $recordElements = $elements[$record['id']] ?? [];
+                $man = null;
+                $woman = null;
+                $children = [];
+                
+                foreach ($recordElements as $el) {
+                  if ($el['type'] === 'MUZ') $man = $el;
+                  elseif ($el['type'] === 'ZENA') $woman = $el;
+                  elseif ($el['type'] === 'DIETA') $children[] = $el;
+                }
+              ?>
               <tr>
                 <td>#<?= $record['id'] ?></td>
-                <td><?= e($record['record_name']) ?></td>
-                <td><span class="badge"><?= e($record['pattern']) ?></span></td>
                 <td>
-                  <!-- Placeholder for elements visualization -->
-                  <div class="elements-preview">
-                    <!-- TODO: Fetch and display elements icons here -->
-                    <span title="Muž">👨</span> ❤️ <span title="Žena">👩</span> 👶 👶
+                  <?php if ($man): ?>
+                    <div class="person-cell">
+                      <span class="person-icon">👨</span>
+                      <span class="person-info"><?= format_element($man) ?></span>
+                      <div class="person-actions">
+                        <button class="btn-tiny" title="Editovať">✏️</button>
+                        <button class="btn-tiny" title="Zmazať">🗑️</button>
+                      </div>
+                    </div>
+                  <?php else: ?>
+                    <button class="btn-dashed">+ Pridať muža</button>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <?php if ($woman): ?>
+                    <div class="person-cell">
+                      <span class="person-icon">👩</span>
+                      <span class="person-info"><?= format_element($woman) ?></span>
+                      <div class="person-actions">
+                        <button class="btn-tiny" title="Editovať">✏️</button>
+                        <button class="btn-tiny" title="Zmazať">🗑️</button>
+                      </div>
+                    </div>
+                  <?php else: ?>
+                    <button class="btn-dashed">+ Pridať ženu</button>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <div class="children-list">
+                    <?php foreach ($children as $child): ?>
+                      <div class="person-cell child-cell">
+                        <span class="person-icon">👶</span>
+                        <span class="person-info"><?= format_element($child) ?></span>
+                        <div class="person-actions">
+                          <button class="btn-tiny" title="Editovať">✏️</button>
+                          <button class="btn-tiny" title="Zmazať">🗑️</button>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                    <button class="btn-dashed btn-small">+ Dieťa</button>
                   </div>
                 </td>
                 <td>
-                  <button class="btn-icon">✏️</button>
-                  <button class="btn-icon">🗑️</button>
+                  <button class="btn-icon" title="Editovať záznam">✏️</button>
+                  <button class="btn-icon" title="Zmazať záznam">🗑️</button>
                 </td>
               </tr>
             <?php endforeach; ?>
@@ -210,6 +292,86 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
+  }
+
+  /* Record View Styles */
+  .record-table td {
+    vertical-align: top;
+  }
+
+  .person-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    position: relative;
+  }
+
+  .person-cell:hover .person-actions {
+    display: flex;
+  }
+
+  .person-icon {
+    font-size: 1.2rem;
+  }
+
+  .person-info {
+    font-size: 0.9rem;
+  }
+
+  .person-actions {
+    display: none;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .btn-tiny {
+    padding: 2px 4px;
+    font-size: 0.7rem;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .btn-tiny:hover {
+    background: var(--bg-secondary);
+  }
+
+  .btn-dashed {
+    border: 1px dashed var(--border-color);
+    background: none;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+  }
+
+  .btn-dashed:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-style: solid;
+  }
+
+  .btn-small {
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    margin-top: 4px;
+    width: auto;
+  }
+
+  .children-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .child-cell {
+    padding-left: 8px;
+    border-left: 2px solid var(--border-color);
   }
 
   @keyframes fadeIn {
