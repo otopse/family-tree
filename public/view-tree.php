@@ -176,34 +176,64 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         width: 0; height: 20px;
     }
 
-    .tf-node {
+    /* Container for Couple to ensure they stay together */
+    .couple-wrapper {
+        display: inline-flex;
+        align-items: center;
+        background: #fff;
         border: 1px solid #ccc;
-        padding: 10px;
-        text-decoration: none;
-        color: #666;
-        font-family: arial, verdana, tahoma;
-        font-size: 12px;
-        display: inline-block;
-        border-radius: 5px;
-        -webkit-border-radius: 5px;
-        -moz-border-radius: 5px;
-        background: white;
-        min-width: 120px;
+        padding: 5px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: relative;
+        z-index: 2;
     }
 
-    .tf-node.male { background-color: #e6f7ff; border-color: #91d5ff; }
-    .tf-node.female { background-color: #fff0f6; border-color: #ffadd2; }
-    
-    .tf-node strong { display: block; font-size: 14px; margin-bottom: 5px; color: #333; }
-    .tf-node .dates { font-size: 11px; color: #888; }
-    
-    .spouse-connector {
-        position: relative;
+    .tf-node {
+        border: 1px solid #ccc;
+        padding: 8px 12px;
+        text-decoration: none;
+        color: #666;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
         display: inline-block;
-        width: 20px;
-        border-bottom: 1px solid #ccc;
-        vertical-align: middle;
+        border-radius: 4px;
+        background: white;
+        min-width: 140px;
+        text-align: left;
         margin: 0 5px;
+    }
+
+    .tf-node.male { 
+        background-color: #f0f7ff; 
+        border-color: #1890ff; 
+        border-left-width: 4px;
+    }
+    .tf-node.female { 
+        background-color: #fff0f6; 
+        border-color: #eb2f96; 
+        border-left-width: 4px;
+    }
+    
+    .tf-node strong { 
+        display: block; 
+        font-size: 14px; 
+        margin-bottom: 4px; 
+        color: #2c3e50; 
+        font-weight: 600;
+    }
+    
+    .tf-node .dates { 
+        font-size: 11px; 
+        color: #888; 
+        margin-top: 2px;
+    }
+
+    .spouse-divider {
+        width: 15px;
+        height: 1px;
+        background: #999;
+        margin: 0 2px;
     }
 </style>
 
@@ -223,77 +253,86 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
                     function renderNode($person, $families, $parentMap, $individuals) {
                         if (!$person) return;
                         
-                        $genderClass = ($person['gender'] === 'M') ? 'male' : (($person['gender'] === 'F') ? 'female' : '');
-                        
                         echo '<li>';
-                        echo '<div class="tf-node ' . $genderClass . '">';
-                        echo '<strong>' . e($person['name']) . '</strong>';
-                        if ($person['birth'] || $person['death']) {
-                            echo '<div class="dates">';
-                            echo e($person['birth'] ? date('Y', strtotime($person['birth'])) : '?');
-                            echo ' - ';
-                            echo e($person['death'] ? date('Y', strtotime($person['death'])) : '');
-                            echo '</div>';
-                        }
-                        echo '</div>';
                         
-                        // Check if this person is a parent in any family
+                        // Begin Couple Wrapper
+                        echo '<div class="couple-wrapper">';
+                        
+                        // Render Primary Person
+                        renderPersonCard($person);
+                        
+                        // Check if this person is a parent in any family (find spouse)
+                        $spouse = null;
+                        $children = [];
+                        
                         if ($person['gedcom_id'] && isset($parentMap[$person['gedcom_id']])) {
+                            // We might have multiple families (marriages), but for this simple tree we usually pick the first one
+                            // or loop through them. Standard vertical trees handle multiple spouses poorly without complex logic.
+                            // We will take the first family for now.
                             foreach ($parentMap[$person['gedcom_id']] as $famId) {
                                 $fam = $families[$famId];
                                 
-                                // Find spouse
-                                $spouse = null;
                                 if ($fam['husb'] && $fam['husb']['gedcom_id'] !== $person['gedcom_id']) $spouse = $fam['husb'];
                                 if ($fam['wife'] && $fam['wife']['gedcom_id'] !== $person['gedcom_id']) $spouse = $fam['wife'];
                                 
-                                if ($spouse) {
-                                    // Render spouse next to person (simplified for now, ideally they should be connected)
-                                    // In this CSS tree structure, spouses are tricky. 
-                                    // Usually we treat the "Couple" as the node.
-                                }
-                                
-                                if (!empty($fam['children'])) {
-                                    echo '<ul>';
-                                    foreach ($fam['children'] as $child) {
-                                        // Find full child info if available
-                                        $childFull = $child;
-                                        if ($child['gedcom_id'] && isset($individuals[$child['gedcom_id']])) {
-                                            $childFull = $individuals[$child['gedcom_id']];
-                                        }
-                                        renderNode($childFull, $families, $parentMap, $individuals);
-                                    }
-                                    echo '</ul>';
-                                }
+                                $children = $fam['children'];
+                                break; // Only first family
                             }
+                        }
+                        
+                        if ($spouse) {
+                            echo '<div class="spouse-divider"></div>';
+                            // Get full spouse info if available
+                            if ($spouse['gedcom_id'] && isset($individuals[$spouse['gedcom_id']])) {
+                                $spouse = $individuals[$spouse['gedcom_id']];
+                            }
+                            renderPersonCard($spouse);
+                        }
+                        
+                        echo '</div>'; // End Couple Wrapper
+                        
+                        // Render Children
+                        if (!empty($children)) {
+                            echo '<ul>';
+                            foreach ($children as $child) {
+                                $childFull = $child;
+                                if ($child['gedcom_id'] && isset($individuals[$child['gedcom_id']])) {
+                                    $childFull = $individuals[$child['gedcom_id']];
+                                }
+                                renderNode($childFull, $families, $parentMap, $individuals);
+                            }
+                            echo '</ul>';
                         }
                         
                         echo '</li>';
                     }
 
+                    function renderPersonCard($person) {
+                        $genderClass = ($person['gender'] === 'M') ? 'male' : (($person['gender'] === 'F') ? 'female' : '');
+                        echo '<div class="tf-node ' . $genderClass . '">';
+                        echo '<strong>' . e($person['name']) . '</strong>';
+                        if ($person['birth'] || $person['death']) {
+                            echo '<div class="dates">';
+                            echo e($person['birth'] ? date('Y', strtotime($person['birth'])) : '');
+                            echo ' - ';
+                            echo e($person['death'] ? date('Y', strtotime($person['death'])) : '');
+                            echo '</div>';
+                        }
+                        echo '</div>';
+                    }
+
                     // Render Root Families
-                    // This is tricky because a family has TWO parents. The CSS tree usually starts with ONE root.
-                    // We will try to render the Husband of the root family as the "Root Node" and show Wife next to him.
-                    
                     foreach ($rootFamilies as $famId) {
                         $fam = $families[$famId];
                         $husb = $fam['husb'];
                         $wife = $fam['wife'];
                         
                         echo '<li>';
-                        echo '<div class="family-node" style="display:inline-block; border:1px solid #ddd; padding:10px; background:#fff;">';
+                        echo '<div class="couple-wrapper">';
                         
-                        if ($husb) {
-                            echo '<div class="tf-node male" style="display:inline-block; margin-right:10px;">';
-                            echo '<strong>' . e($husb['name']) . '</strong>';
-                            echo '</div>';
-                        }
-                        
-                        if ($wife) {
-                            echo '<div class="tf-node female" style="display:inline-block;">';
-                            echo '<strong>' . e($wife['name']) . '</strong>';
-                            echo '</div>';
-                        }
+                        if ($husb) renderPersonCard($husb);
+                        if ($husb && $wife) echo '<div class="spouse-divider"></div>';
+                        if ($wife) renderPersonCard($wife);
                         
                         echo '</div>';
                         
