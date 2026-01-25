@@ -13,6 +13,11 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
 
     // Normalize line endings
     $content = str_replace(["\r\n", "\r"], "\n", $content);
+    
+    // Remove BOM if present
+    $bom = pack('H*','EFBBBF');
+    $content = preg_replace("/^$bom/", '', $content);
+    
     $lines = explode("\n", $content);
 
     $individuals = [];
@@ -74,14 +79,14 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
                     if (isset($currentRecord['last_event'])) {
                         $event = $currentRecord['last_event'];
                         $currentRecord[$event . '_DATE'] = $value;
-                        unset($currentRecord['last_event']);
+                        // Do not unset last_event, as PLAC might follow
                     }
                     break;
                 case 'PLAC':
                     if (isset($currentRecord['last_event'])) {
                         $event = $currentRecord['last_event'];
                         $currentRecord[$event . '_PLAC'] = $value;
-                        unset($currentRecord['last_event']);
+                        // Do not unset last_event
                     }
                     break;
                 case 'HUSB':
