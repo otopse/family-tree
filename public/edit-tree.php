@@ -243,7 +243,7 @@ function render_person_html(?array $personData): string {
     }
 
     $deathStr = '';
-    if (!empty($el['death_date'])) {
+    if (!empty($el['death_date']) && $el['death_date'] !== date('Y-m-d')) {
       $deathStr = $formatDate($el['death_date']);
     }
 
@@ -261,7 +261,7 @@ function render_person_html(?array $personData): string {
          $dateStr = "{$open}{$birthStr}{$close}";
       }
     }
-  } elseif (!empty($el['death_date'])) {
+  } elseif (!empty($el['death_date']) && $el['death_date'] !== date('Y-m-d')) {
       // Only death date known
       $d = $formatDate($el['death_date']);
       $dateStr = "(? - {$d})";

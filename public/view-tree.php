@@ -53,6 +53,12 @@ foreach ($rows as $row) {
     if ($row['gedcom_id'] && !isset($individuals[$row['gedcom_id']])) {
         $bYear = extractYear($row['birth_date']);
         $dYear = extractYear($row['death_date']);
+
+        // Fix: Ignore death date if it matches today (default value error)
+        if ($row['death_date'] === date('Y-m-d')) {
+             $dYear = null;
+             $row['death_date'] = null;
+        }
         
         // Sanity check/Defaults
         if (!$bYear && $dYear) $bYear = $dYear - 60;
