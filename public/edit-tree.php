@@ -77,6 +77,22 @@ try {
     $debugLog = __DIR__ . '/gedcom_debug.log';
     file_put_contents($debugLog, "\n\n=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
 
+    // Helper to safely get year from YYYY.MM.DD, YYYY-MM-DD, or YYYY
+    $getYear = function($dateStr) {
+      if (empty($dateStr)) return null;
+      // Clean up date string
+      $dateStr = trim($dateStr);
+      
+      // Match start with 4 digits (YYYY...)
+      if (preg_match('/^(\d{4})/', $dateStr, $m)) {
+        return (int)$m[1];
+      }
+      
+      // Fallback to strtotime
+      $ts = strtotime($dateStr);
+      return $ts ? (int)date('Y', $ts) : null;
+    };
+
     // ---------------------------------------------------------
     // 3. Global Date Lookup (Iterative)
     // ---------------------------------------------------------
