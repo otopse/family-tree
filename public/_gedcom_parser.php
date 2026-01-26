@@ -32,7 +32,8 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
     $lines = explode("\n", $content);
 
     $debugLog = __DIR__ . '/gedcom_debug.log';
-    file_put_contents($debugLog, "Starting import for tree $treeId\n");
+    file_put_contents($debugLog, "=== GEDCOM IMPORT DEBUG START " . date('Y-m-d H:i:s') . " ===\n");
+    file_put_contents($debugLog, "Starting import for tree $treeId\n", FILE_APPEND);
     file_put_contents($debugLog, "Content length: " . strlen($content) . "\n", FILE_APPEND);
     file_put_contents($debugLog, "Line count: " . count($lines) . "\n", FILE_APPEND);
 
@@ -139,10 +140,16 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
 
     foreach ($families as $famId => $fam) {
-        file_put_contents($debugLog, "Processing family: $famId\n", FILE_APPEND);
+        $logMsg = "Processing family: $famId\n";
         $husbId = $fam['husb'] ?? null;
         $wifeId = $fam['wife'] ?? null;
         $childrenIds = $fam['children'] ?? [];
+
+        if ($husbId) $logMsg .= "  Husb: $husbId (" . ($individuals[$husbId]['name'] ?? 'Unknown') . ")\n";
+        if ($wifeId) $logMsg .= "  Wife: $wifeId (" . ($individuals[$wifeId]['name'] ?? 'Unknown') . ")\n";
+        if (!empty($childrenIds)) $logMsg .= "  Children: " . implode(', ', $childrenIds) . "\n";
+        
+        file_put_contents($debugLog, $logMsg, FILE_APPEND);
 
         // Construct pattern (e.g., MZDDD)
         $pattern = '';
@@ -183,7 +190,7 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
         $recordId = (int)db()->lastInsertId();
 
         // Helper to insert element
-        $insertElement = function($indiId, $type, $sortOrder) use ($recordId, $individuals) {
+        $insertElement = function($indiId, $type, $sortOrder) use ($recordId, $individuals, $debugLog) {
             if (!$indiId || !isset($individuals[$indiId])) return;
             
             $indi = $individuals[$indiId];
@@ -224,6 +231,8 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
                 // Same logic
                 $dDate = $raw;
             }
+
+            file_put_contents($debugLog, "  Inserting Element: {$indi['name']} ($type) - Birt: " . ($bDate ?? 'null') . " (Raw: " . ($indi['BIRT_DATE'] ?? 'null') . ")\n", FILE_APPEND);
 
             $stmt = db()->prepare(
                 'INSERT INTO ft_elements (record_id, type, full_name, birth_date, birth_place, death_date, death_place, gender, gedcom_id, sort_order)
