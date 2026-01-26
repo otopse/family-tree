@@ -73,6 +73,10 @@ try {
       $elementsByRecord[$el['record_id']][] = $el;
     }
 
+    // Debug Log Init
+    $debugLog = __DIR__ . '/gedcom_debug.log';
+    file_put_contents($debugLog, "=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n");
+
     // Process each record to apply business logic (date imputation)
     foreach ($rawRecords as $record) {
       $els = $elementsByRecord[$record['id']] ?? [];
@@ -86,6 +90,8 @@ try {
         elseif ($e['type'] === 'ZENA') $woman = $e;
         elseif ($e['type'] === 'DIETA') $children[] = $e;
       }
+
+      $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
 
       // Helper to safely get year from YYYY-MM-DD or YYYY
       $getYear = function($dateStr) {
@@ -104,6 +110,9 @@ try {
       $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
       $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
       
+      $logMsg .= "  [Raw] Man: " . ($man ? ($man['birth_date']??'empty') : 'N/A') . " -> Year: " . ($manYear ?? 'null') . "\n";
+      $logMsg .= "  [Raw] Woman: " . ($woman ? ($woman['birth_date']??'empty') : 'N/A') . " -> Year: " . ($womanYear ?? 'null') . "\n";
+
       $manFictional = false;
       $womanFictional = false;
 
@@ -118,6 +127,7 @@ try {
       $oldestChildYear = null;
       foreach ($children as $child) {
         $cy = $getYear($child['birth_date'] ?? '');
+        $logMsg .= "  [Raw] Child ({$child['full_name']}): " . ($child['birth_date']??'empty') . " -> Year: " . ($cy ?? 'null') . "\n";
         if ($cy !== null) {
           if ($oldestChildYear === null || $cy < $oldestChildYear) {
             $oldestChildYear = $cy;
@@ -129,6 +139,7 @@ try {
       if ($womanYear === null && $oldestChildYear !== null && $woman) {
         $womanYear = $oldestChildYear - 20;
         $womanFictional = true;
+        $logMsg .= "  [Logic] Woman imputed from oldest child ($oldestChildYear - 20 = $womanYear)\n";
       }
 
       // B) Horizontal: Infer Spouse from Spouse
@@ -136,11 +147,13 @@ try {
       if ($manYear !== null && $womanYear === null && $woman) {
         $womanYear = $manYear + 10;
         $womanFictional = true;
+        $logMsg .= "  [Logic] Woman imputed from Man ($manYear + 10 = $womanYear)\n";
       }
       // "Ak je známy dátum narodenia ženy ale nie manžela, potom manžel=žena-10 rokov"
       elseif ($womanYear !== null && $manYear === null && $man) {
         $manYear = $womanYear - 10;
         $manFictional = true;
+        $logMsg .= "  [Logic] Man imputed from Woman ($womanYear - 10 = $manYear)\n";
       }
 
       // C) Top-Down: Infer Children from Mother (or Siblings)
@@ -156,11 +169,13 @@ try {
           if ($index === 0 && $womanYear !== null) {
             $childYear = $womanYear + 20;
             $childFictional = true;
+            $logMsg .= "  [Logic] Child #$index imputed from Woman ($womanYear + 20 = $childYear)\n";
           }
           // "Ak je známy dátum narodenia predchádzajúceho dieťaťa, potom ďalšie dieťa=predchádzajúce+3 roky"
           elseif ($index > 0 && $prevChildYear !== null) {
             $childYear = $prevChildYear + 3;
             $childFictional = true;
+            $logMsg .= "  [Logic] Child #$index imputed from sibling ($prevChildYear + 3 = $childYear)\n";
           }
         }
 
@@ -183,6 +198,9 @@ try {
 
       // Determine Sort Key (Man's year, fallback to Woman's year, fallback to 9999)
       $sortYear = $manYear ?? ($womanYear ?? 9999);
+
+      $logMsg .= "  [Final] SortYear: $sortYear, ManYear: " . ($manYear??'null') . ", WomanYear: " . ($womanYear??'null') . "\n";
+      file_put_contents($debugLog, $logMsg . "\n", FILE_APPEND);
 
       $viewData[] = [
         'record_id' => $record['id'],

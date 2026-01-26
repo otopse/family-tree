@@ -189,17 +189,40 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
             $indi = $individuals[$indiId];
             $gender = isset($indi['sex']) ? ($indi['sex'] === 'M' ? 'M' : ($indi['sex'] === 'F' ? 'F' : 'U')) : 'U';
             
-            // Parse dates (very basic)
+            // Parse dates: Store original string if possible (schema is VARCHAR)
+            // But if it's clearly a date that strtotime handles well (like "1990-01-01" or "2 Jan 1990"), we can normalize it?
+            // Actually, best to trust the source string but maybe clean it up. 
+            // The bug was strtotime("1919") -> "2026-01-26". 
+            // So we MUST avoid strtotime on just years.
+            
             $bDate = null;
             if (isset($indi['BIRT_DATE'])) {
-                $ts = strtotime($indi['BIRT_DATE']);
-                if ($ts) $bDate = date('Y-m-d', $ts);
+                $raw = trim($indi['BIRT_DATE']);
+                // If it is just a year, keep it.
+                if (preg_match('/^\d{4}$/', $raw)) {
+                    $bDate = $raw;
+                } else {
+                    // Try to parse, but be careful.
+                    // If we can't be sure, store raw.
+                    // Let's assume schema is VARCHAR now, so storing raw is safe.
+                    // If we want consistent YYYY-MM-DD for search/sort, we might try parsing.
+                    $ts = strtotime($raw);
+                    // Check if result is "today" (indicative of failed parse usually defaulting to now if just time parsed)
+                    // or check date_parse($raw).
+                    
+                    // Simple heuristic: If raw string is long enough and strtotime works...
+                    // But "1919" works for strtotime (time).
+                    
+                    // Let's just store RAW for now as per user request "nič sa nemá dopočítavať".
+                    $bDate = $raw;
+                }
             }
             
             $dDate = null;
             if (isset($indi['DEAT_DATE'])) {
-                $ts = strtotime($indi['DEAT_DATE']);
-                if ($ts) $dDate = date('Y-m-d', $ts);
+                $raw = trim($indi['DEAT_DATE']);
+                // Same logic
+                $dDate = $raw;
             }
 
             $stmt = db()->prepare(
