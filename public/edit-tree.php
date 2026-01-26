@@ -90,6 +90,12 @@ try {
       // Helper to safely get year from YYYY-MM-DD or YYYY
       $getYear = function($dateStr) {
         if (empty($dateStr)) return null;
+        // Clean up date string
+        $dateStr = trim($dateStr);
+        // If it's just a year (4 digits), return it directly
+        if (preg_match('/^\d{4}$/', $dateStr)) {
+          return (int)$dateStr;
+        }
         $ts = strtotime($dateStr);
         return $ts ? (int)date('Y', $ts) : null;
       };
@@ -101,7 +107,31 @@ try {
       $manFictional = false;
       $womanFictional = false;
 
-      // 2. Impute Parents
+      // -------------------------------------------------------
+      // IMPUTATION LOGIC
+      // -------------------------------------------------------
+
+      // A) Bottom-Up: Infer Parents from Children if parents missing
+      // (Only if BOTH parents are missing years, or at least we need an anchor)
+      // Actually, if we have children but no parents, we can anchor from the oldest child.
+      
+      $oldestChildYear = null;
+      foreach ($children as $child) {
+        $cy = $getYear($child['birth_date'] ?? '');
+        if ($cy !== null) {
+          if ($oldestChildYear === null || $cy < $oldestChildYear) {
+            $oldestChildYear = $cy;
+          }
+        }
+      }
+
+      // If woman is missing year but we have a child
+      if ($womanYear === null && $oldestChildYear !== null && $woman) {
+        $womanYear = $oldestChildYear - 20;
+        $womanFictional = true;
+      }
+
+      // B) Horizontal: Infer Spouse from Spouse
       // "Ak je známy dátum narodenia manžela ale nie ženy, potom doplň rok narodenia ženy ako manžel +10 rokov"
       if ($manYear !== null && $womanYear === null && $woman) {
         $womanYear = $manYear + 10;
@@ -113,7 +143,7 @@ try {
         $manFictional = true;
       }
 
-      // 3. Impute Children
+      // C) Top-Down: Infer Children from Mother (or Siblings)
       $processedChildren = [];
       $prevChildYear = null;
 
@@ -189,39 +219,36 @@ function render_person_html(?array $personData): string {
   $name = e($el['full_name']);
   $dateStr = '';
 
+  // Helper to format a single date string safely
+  $formatDate = function($val) {
+    if (empty($val)) return '';
+    $val = trim($val);
+    // If it is just a year, return it as is to prevent strtotime parsing "1848" as "18:48 today"
+    if (preg_match('/^\d{4}$/', $val)) {
+      return $val;
+    }
+    // Try parse
+    $ts = strtotime($val);
+    if (!$ts) return $val; // fallback to original string if parse fails
+    return date('Y.m.d', $ts);
+  };
+
   // Calculate Display Date
   if ($year) {
-    $birthStr = (string)$year; // We only use year for imputed, or if that's all we have
+    $birthStr = (string)$year; 
     
-    // If we have a full real date, use it instead of just the year?
-    // The prompt implies checking 'is_fictional'.
-    // If it's NOT fictional, we might want the original format from DB if available.
-    // However, to keep it consistent with the "year calculation" logic, let's use the DB date if real,
-    // and just the Year if fictional.
-    
+    // If NOT fictional, try to use full birth date from DB
     if (!$isFictional && !empty($el['birth_date'])) {
-      $birthStr = date('Y.m.d', strtotime($el['birth_date']));
+      $birthStr = $formatDate($el['birth_date']);
     }
 
     $deathStr = '';
     if (!empty($el['death_date'])) {
-      $deathStr = date('Y.m.d', strtotime($el['death_date']));
+      $deathStr = $formatDate($el['death_date']);
     }
 
-    // Brackets logic
-    // "Ak je is_fictional_birth_date potom zátvorka pred dátumom na dlaždici nebude okrúhla ( ale hranatá ["
-    // "Ak je otváracia zátvorka hranatá a chýba dátum úmrtia, potom aj zatváracia z´tvorka bude hranatá ]"
-    
     $open = $isFictional ? '[' : '(';
     $close = $isFictional ? ']' : ')'; 
-    
-    // Standard round brackets logic usually: (Born - Died)
-    // Mixed logic per prompt:
-    // Fictional: [Born...
-    // If Death exists: [Born - Died] (Assumed matching brackets)
-    // If Death missing: [Born]
-    
-    // If NOT fictional: (Born - Died) or (Born)
 
     if ($isFictional) {
       // Fictional: [YYYY]
@@ -236,7 +263,7 @@ function render_person_html(?array $personData): string {
     }
   } elseif (!empty($el['death_date'])) {
       // Only death date known
-      $d = date('Y.m.d', strtotime($el['death_date']));
+      $d = $formatDate($el['death_date']);
       $dateStr = "(? - {$d})";
   }
 
