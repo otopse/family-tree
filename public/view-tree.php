@@ -187,9 +187,29 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
     <div id="tree-wrapper">
         <div id="loading" style="padding: 20px;">Načítavam graf...</div>
     </div>
+    <div id="diagnostics" style="padding: 10px; border-top: 1px solid #ccc; background: #eee; height: 150px; overflow: auto; font-family: monospace; font-size: 12px;">
+        <strong>Diagnostika:</strong><br>
+    </div>
 </div>
 
 <script>
+    function log(msg) {
+        const d = document.getElementById('diagnostics');
+        if (d) {
+            d.innerHTML += msg + '<br>';
+            d.scrollTop = d.scrollHeight;
+        }
+        console.log(msg);
+    }
+
+    window.onerror = function(msg, url, line, col, error) {
+        log(`ERROR: ${msg} at ${line}:${col}`);
+        return false;
+    };
+
+    const individuals = <?= json_encode(array_values($individuals)) ?>;
+    const families = <?= json_encode($cleanFamilies) ?>;
+    
     // Config
     const CONFIG = {
         pixelsPerYear: 5, // Compressed X axis
@@ -205,14 +225,23 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
-        initTree();
+        try {
+            log("DOM Loaded. Starting initTree...");
+            initTree();
+        } catch (e) {
+            log("CRITICAL ERROR in initTree: " + e.message);
+            console.error(e);
+        }
     });
 
     function initTree() {
+        log(`Data loaded: ${individuals.length} individuals, ${families.length} families`);
+        
         const wrapper = document.getElementById('tree-wrapper');
         const loading = document.getElementById('loading');
         
         // 1. Prepare Data & Layout
+        log("Preparing layout...");
         
         // Map for easy lookup
         const indMap = {};
@@ -221,6 +250,9 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         // Determine X range
         let minDataYear = Math.min(...individuals.map(i => i.birthYear));
         let maxDataYear = Math.max(...individuals.map(i => i.deathYear));
+        
+        log(`Year range: ${minDataYear} - ${maxDataYear}`);
+        
         CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
         CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50; // More space on right for spouse curves
 
@@ -250,6 +282,7 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         // 2. Vertical Layout (Ordering)
         // We want to place related people close to each other.
         // Strategy: DFS traversal starting from "roots" (people with no parents in the tree, or oldest ancestors).
+        log("Calculating vertical ordering...");
         
         const visited = new Set();
         const orderedIndividuals = [];
@@ -265,6 +298,8 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         const roots = individuals.filter(i => !allChildren.has(i.id));
         // Sort roots by birth year
         roots.sort((a, b) => a.birthYear - b.birthYear);
+        
+        log(`Found ${roots.length} root individuals`);
 
         function traverse(indId) {
             if (visited.has(indId)) return;
@@ -321,7 +356,10 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
         const totalHeight = (orderedIndividuals.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
 
+        log(`Canvas dimensions: ${totalWidth}x${totalHeight}`);
+
         // 3. Render SVG
+        log("Rendering SVG...");
         const ns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(ns, "svg");
         svg.setAttribute("width", totalWidth);
@@ -484,6 +522,7 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         svg.appendChild(boxesGroup);
 
         // Finish
+        log("Rendering complete.");
         loading.remove();
         wrapper.appendChild(svg);
     }
