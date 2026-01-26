@@ -196,40 +196,63 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
             $indi = $individuals[$indiId];
             $gender = isset($indi['sex']) ? ($indi['sex'] === 'M' ? 'M' : ($indi['sex'] === 'F' ? 'F' : 'U')) : 'U';
             
-            // Parse dates: Store original string if possible (schema is VARCHAR)
-            // But if it's clearly a date that strtotime handles well (like "1990-01-01" or "2 Jan 1990"), we can normalize it?
-            // Actually, best to trust the source string but maybe clean it up. 
-            // The bug was strtotime("1919") -> "2026-01-26". 
-            // So we MUST avoid strtotime on just years.
-            
+            // Parse dates to YYYY.MM.DD, YYYY.MM, or YYYY
+            $normalizeDate = function($raw) {
+                if (empty($raw)) return null;
+                $raw = trim($raw);
+                
+                // 1. YYYY
+                if (preg_match('/^(\d{4})$/', $raw, $m)) {
+                    return $m[1];
+                }
+                
+                // 2. GEDCOM format: DD MON YYYY (e.g. 17 JAN 1780)
+                // MON map
+                $mons = [
+                    'JAN' => '01', 'FEB' => '02', 'MAR' => '03', 'APR' => '04', 'MAY' => '05', 'JUN' => '06',
+                    'JUL' => '07', 'AUG' => '08', 'SEP' => '09', 'OCT' => '10', 'NOV' => '11', 'DEC' => '12'
+                ];
+                
+                if (preg_match('/^(\d{1,2})\s+([A-Z]{3})\s+(\d{4})$/i', $raw, $m)) {
+                    $d = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                    $monStr = strtoupper($m[2]);
+                    $mon = $mons[$monStr] ?? '00';
+                    $y = $m[3];
+                    if ($mon !== '00') {
+                        return "$y.$mon.$d";
+                    }
+                }
+                
+                // 3. Just MON YYYY
+                if (preg_match('/^([A-Z]{3})\s+(\d{4})$/i', $raw, $m)) {
+                    $monStr = strtoupper($m[1]);
+                    $mon = $mons[$monStr] ?? '00';
+                    $y = $m[2];
+                    if ($mon !== '00') {
+                        return "$y.$mon";
+                    }
+                }
+                
+                // 4. Try strtotime for other formats
+                $ts = strtotime($raw);
+                if ($ts) {
+                    // Check if input has day/month
+                    // If input is just "1920", strtotime makes it today's date with time. We already handled "^\d{4}$" above.
+                    return date('Y.m.d', $ts);
+                }
+                
+                // Fallback: Return raw string but safe?
+                return $raw;
+            };
+
             $bDate = null;
             if (isset($indi['BIRT_DATE'])) {
-                $raw = trim($indi['BIRT_DATE']);
-                // If it is just a year, keep it.
-                if (preg_match('/^\d{4}$/', $raw)) {
-                    $bDate = $raw;
-                } else {
-                    // Try to parse, but be careful.
-                    // If we can't be sure, store raw.
-                    // Let's assume schema is VARCHAR now, so storing raw is safe.
-                    // If we want consistent YYYY-MM-DD for search/sort, we might try parsing.
-                    $ts = strtotime($raw);
-                    // Check if result is "today" (indicative of failed parse usually defaulting to now if just time parsed)
-                    // or check date_parse($raw).
-                    
-                    // Simple heuristic: If raw string is long enough and strtotime works...
-                    // But "1919" works for strtotime (time).
-                    
-                    // Let's just store RAW for now as per user request "nič sa nemá dopočítavať".
-                    $bDate = $raw;
-                }
+                $bDate = $normalizeDate($indi['BIRT_DATE']);
             }
             
             $dDate = null;
             if (isset($indi['DEAT_DATE'])) {
-                $raw = trim($indi['DEAT_DATE']);
-                // Same logic
-                $dDate = $raw;
+                $dDate = $normalizeDate($indi['DEAT_DATE']);
             }
 
             file_put_contents($debugLog, "  Inserting Element: {$indi['name']} ($type) - Birt: " . ($bDate ?? 'null') . " (Raw: " . ($indi['BIRT_DATE'] ?? 'null') . ")\n", FILE_APPEND);

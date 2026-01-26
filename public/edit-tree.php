@@ -93,15 +93,18 @@ try {
 
       $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
 
-      // Helper to safely get year from YYYY-MM-DD or YYYY
+      // Helper to safely get year from YYYY.MM.DD, YYYY-MM-DD, or YYYY
       $getYear = function($dateStr) {
         if (empty($dateStr)) return null;
         // Clean up date string
         $dateStr = trim($dateStr);
-        // If it's just a year (4 digits), return it directly
-        if (preg_match('/^\d{4}$/', $dateStr)) {
-          return (int)$dateStr;
+        
+        // Match start with 4 digits (YYYY...)
+        if (preg_match('/^(\d{4})/', $dateStr, $m)) {
+          return (int)$m[1];
         }
+        
+        // Fallback to strtotime
         $ts = strtotime($dateStr);
         return $ts ? (int)date('Y', $ts) : null;
       };
