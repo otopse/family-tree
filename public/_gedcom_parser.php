@@ -32,7 +32,7 @@ function parse_and_import_gedcom(string $filePath, int $treeId, int $ownerId): v
     $lines = explode("\n", $content);
 
     $debugLog = __DIR__ . '/gedcom_debug.log';
-    file_put_contents($debugLog, "=== GEDCOM IMPORT DEBUG START " . date('Y-m-d H:i:s') . " ===\n");
+    file_put_contents($debugLog, "\n\n=== GEDCOM IMPORT DEBUG START " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
     file_put_contents($debugLog, "Starting import for tree $treeId\n", FILE_APPEND);
     file_put_contents($debugLog, "Content length: " . strlen($content) . "\n", FILE_APPEND);
     file_put_contents($debugLog, "Line count: " . count($lines) . "\n", FILE_APPEND);

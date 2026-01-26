@@ -75,7 +75,7 @@ try {
 
     // Debug Log Init
     $debugLog = __DIR__ . '/gedcom_debug.log';
-    file_put_contents($debugLog, "=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n");
+    file_put_contents($debugLog, "\n\n=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
 
     // Process each record to apply business logic (date imputation)
     foreach ($rawRecords as $record) {
