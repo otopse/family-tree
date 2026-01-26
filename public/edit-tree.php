@@ -145,6 +145,14 @@ try {
         $logMsg .= "  [Logic] Woman imputed from oldest child ($oldestChildYear - 20 = $womanYear)\n";
       }
 
+      // If man is missing year but we have a child (and wasn't imputed from woman yet)
+      if ($manYear === null && $oldestChildYear !== null && $man) {
+         // Logic: Child -> Mother(-20) -> Father(-10) implies Father = Child - 30
+         $manYear = $oldestChildYear - 30;
+         $manFictional = true;
+         $logMsg .= "  [Logic] Man imputed from oldest child ($oldestChildYear - 30 = $manYear)\n";
+      }
+
       // B) Horizontal: Infer Spouse from Spouse
       // "Ak je známy dátum narodenia manžela ale nie ženy, potom doplň rok narodenia ženy ako manžel +10 rokov"
       if ($manYear !== null && $womanYear === null && $woman) {
