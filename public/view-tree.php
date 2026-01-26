@@ -136,16 +136,17 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         fill: #fff0f6;
         stroke: #ffadd2;
     }
-    .person-name {
+    .person-text {
         font-family: 'Segoe UI', sans-serif;
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 11px;
         fill: #333;
     }
-    .person-dates {
-        font-family: 'Segoe UI', sans-serif;
-        font-size: 10px;
-        fill: #666;
+    .spouse-line {
+        stroke: #f5222d; /* Reddish for marriage */
+        stroke-dasharray: 4;
+    }
+    .child-line {
+        stroke: #1890ff;
     }
     .id-badge {
         fill: black;
@@ -189,18 +190,17 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
 </div>
 
 <script>
-    const individuals = <?= json_encode(array_values($individuals)) ?>;
-    const families = <?= json_encode($cleanFamilies) ?>;
-    
     // Config
     const CONFIG = {
-        pixelsPerYear: 10,
-        rowHeight: 50,
-        boxHeight: 36,
+        pixelsPerYear: 5, // Compressed X axis
+        rowHeight: 45,
+        boxHeight: 30,
         minYear: 1800,
         maxYear: 2050,
         paddingX: 50,
-        paddingY: 50
+        paddingY: 50,
+        charWidth: 7, // Estimate for width calculation
+        basePadding: 20 // Padding inside box
     };
 
     // Initialize
@@ -212,55 +212,123 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         const wrapper = document.getElementById('tree-wrapper');
         const loading = document.getElementById('loading');
         
-        // 1. Calculate Layout
-        // Assign sequential IDs (1, 2, 3...) for display
-        individuals.forEach((ind, index) => {
-            ind.displayId = index + 1;
-        });
+        // 1. Prepare Data & Layout
+        
+        // Map for easy lookup
+        const indMap = {};
+        individuals.forEach(i => indMap[i.id] = i);
 
         // Determine X range
         let minDataYear = Math.min(...individuals.map(i => i.birthYear));
         let maxDataYear = Math.max(...individuals.map(i => i.deathYear));
         CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
-        CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 20;
+        CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50; // More space on right for spouse curves
 
-        // Assign Rows (Greedy packing algorithm)
-        // Sort by birth year to pack from left to right
-        const sortedInds = [...individuals].sort((a, b) => a.birthYear - b.birthYear);
-        const rows = []; // Array of endYears
-
-        sortedInds.forEach(ind => {
-            // Find first row where this person fits
-            let rowIndex = -1;
-            for (let r = 0; r < rows.length; r++) {
-                if (rows[r] < ind.birthYear) {
-                    rowIndex = r;
-                    break;
+        // Calculate Widths based on text length
+        individuals.forEach(ind => {
+            // Estimate width: name length + date string length
+            // Format: Meno Priezvisko (Nar - Umr)
+            // Or just [Rok] if dates unknown?
+            // The PHP part passes formatted dates, but we construct the string in JS for display.
+            // Let's reconstruct the display string to measure it.
+            
+            let dateStr = "";
+            if (ind.birthYear) {
+                dateStr = `${ind.birthYear}`;
+                if (ind.deathYear) {
+                    dateStr += ` - ${ind.deathYear}`;
                 }
             }
-
-            if (rowIndex === -1) {
-                // New row
-                rowIndex = rows.length;
-                rows.push(ind.deathYear + 5); // +5 years buffer
-            } else {
-                rows[rowIndex] = ind.deathYear + 5;
-            }
-
-            ind.rowIndex = rowIndex;
+            
+            const displayText = `${ind.name} (${dateStr})`;
+            ind.displayText = displayText;
+            
+            // Estimate width
+            ind.width = (displayText.length * CONFIG.charWidth) + CONFIG.basePadding + 20; // +20 for ID badge
         });
 
-        const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
-        const totalHeight = (rows.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
+        // 2. Vertical Layout (Ordering)
+        // We want to place related people close to each other.
+        // Strategy: DFS traversal starting from "roots" (people with no parents in the tree, or oldest ancestors).
+        
+        const visited = new Set();
+        const orderedIndividuals = [];
 
-        // 2. Build SVG
+        // Find roots: People whose parents are not in the `individuals` list or are unknown
+        // We can use the parentMap from PHP, but we didn't pass it fully.
+        // Let's infer roots: People who are not children in any family in `families` list.
+        const allChildren = new Set();
+        families.forEach(f => {
+            if (f.children) f.children.forEach(c => allChildren.add(c));
+        });
+
+        const roots = individuals.filter(i => !allChildren.has(i.id));
+        // Sort roots by birth year
+        roots.sort((a, b) => a.birthYear - b.birthYear);
+
+        function traverse(indId) {
+            if (visited.has(indId)) return;
+            visited.add(indId);
+            
+            const ind = indMap[indId];
+            if (!ind) return;
+            
+            orderedIndividuals.push(ind);
+
+            // Find spouses and process them immediately
+            // We need to find families where this person is a parent
+            const myFamilies = families.filter(f => f.husb === indId || f.wife === indId);
+            
+            myFamilies.forEach(fam => {
+                const spouseId = (fam.husb === indId) ? fam.wife : fam.husb;
+                if (spouseId && !visited.has(spouseId)) {
+                    traverse(spouseId);
+                }
+            });
+
+            // Process children for each family
+            myFamilies.forEach(fam => {
+                if (fam.children) {
+                    // Sort children by birth year
+                    const kids = fam.children
+                        .map(id => indMap[id])
+                        .filter(k => k) // filter nulls
+                        .sort((a, b) => a.birthYear - b.birthYear);
+                        
+                    kids.forEach(kid => {
+                        traverse(kid.id);
+                    });
+                }
+            });
+        }
+
+        // Run traversal
+        roots.forEach(root => traverse(root.id));
+        
+        // Process any remaining disconnected individuals
+        individuals.forEach(ind => {
+            if (!visited.has(ind.id)) {
+                traverse(ind.id);
+            }
+        });
+
+        // Assign Row Indices
+        orderedIndividuals.forEach((ind, idx) => {
+            ind.rowIndex = idx;
+        });
+
+        // Calculate total dimensions
+        const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
+        const totalHeight = (orderedIndividuals.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
+
+        // 3. Render SVG
         const ns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(ns, "svg");
         svg.setAttribute("width", totalWidth);
         svg.setAttribute("height", totalHeight);
         svg.id = "tree-svg";
 
-        // Draw Grid
+        // Draw Grid (Vertical lines for years)
         const gridGroup = document.createElementNS(ns, "g");
         for (let y = CONFIG.minYear; y <= CONFIG.maxYear; y += 10) {
             const x = getX(y);
@@ -271,7 +339,7 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             line.setAttribute("x2", x);
             line.setAttribute("y2", totalHeight);
             line.setAttribute("class", "grid-line");
-            if (y % 50 === 0) line.style.strokeWidth = "2";
+            if (y % 50 === 0) line.style.strokeWidth = "1.5";
             gridGroup.appendChild(line);
 
             if (y % 50 === 0) {
@@ -286,128 +354,130 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         svg.appendChild(gridGroup);
 
         // Draw Connections
-        // Map individual GedcomID to Object for easy lookup
-        const indMap = {};
-        individuals.forEach(i => indMap[i.id] = i);
-
         const connectionsGroup = document.createElementNS(ns, "g");
         
+        // 1. Spouse Connections (Curved line on the right)
+        // "Manželské páry spájaj čiarami, ktoré vychádzajú a vchádzajú z pravej strany ich tehál."
+        const processedSpouses = new Set();
         families.forEach(fam => {
-            const children = fam.children || [];
-            if (children.length === 0) return;
+            if (fam.husb && fam.wife) {
+                const h = indMap[fam.husb];
+                const w = indMap[fam.wife];
+                if (h && w) {
+                    const pairKey = [h.id, w.id].sort().join('-');
+                    if (processedSpouses.has(pairKey)) return;
+                    processedSpouses.add(pairKey);
 
-            // Parents
-            const husb = fam.husb ? indMap[fam.husb] : null;
-            const wife = fam.wife ? indMap[fam.wife] : null;
+                    const hX = getX(h.birthYear) + h.width;
+                    const hY = getY(h) + (CONFIG.boxHeight / 2);
+                    
+                    const wX = getX(w.birthYear) + w.width;
+                    const wY = getY(w) + (CONFIG.boxHeight / 2);
 
-            // Start point (Average of parents if both exist, otherwise just one)
-            let startX, startY;
-            if (husb && wife) {
-                startX = (getX(husb.deathYear) + getX(wife.birthYear)) / 2; // Midpoint X roughly
-                // Better: Use actual box centers
-                const hCX = getX(husb.birthYear) + (getWidth(husb) / 2);
-                const hCY = getY(husb) + (CONFIG.boxHeight / 2);
-                const wCX = getX(wife.birthYear) + (getWidth(wife) / 2);
-                const wCY = getY(wife) + (CONFIG.boxHeight / 2);
-                
-                startX = (hCX + wCX) / 2;
-                startY = (hCY + wCY) / 2;
-            } else if (husb) {
-                startX = getX(husb.birthYear) + (getWidth(husb) / 2);
-                startY = getY(husb) + (CONFIG.boxHeight / 2);
-            } else if (wife) {
-                startX = getX(wife.birthYear) + (getWidth(wife) / 2);
-                startY = getY(wife) + (CONFIG.boxHeight / 2);
-            } else {
-                return;
+                    // Control points for curve on the right
+                    const cpOffset = 30;
+                    const cp1X = Math.max(hX, wX) + cpOffset;
+                    const cp1Y = hY;
+                    const cp2X = Math.max(hX, wX) + cpOffset;
+                    const cp2Y = wY;
+
+                    const path = document.createElementNS(ns, "path");
+                    const d = `M ${hX} ${hY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${wX} ${wY}`;
+                    path.setAttribute("d", d);
+                    path.setAttribute("class", "connection-line spouse-line");
+                    connectionsGroup.appendChild(path);
+                }
             }
+        });
 
-            children.forEach(childId => {
+        // 2. Parent-Child Connections (Mother -> Child)
+        // "Čiara smerujúca k dieťaťu musí začínať na tehle matky... presne 20 pixelov od ľavého okraja"
+        families.forEach(fam => {
+            if (!fam.children || fam.children.length === 0) return;
+
+            // Prefer Mother, then Father
+            const parentId = fam.wife ? fam.wife : fam.husb;
+            const parent = indMap[parentId];
+            
+            if (!parent) return;
+
+            // Anchor point: 20px from left edge of parent
+            const startX = getX(parent.birthYear) + 20;
+            const startY = getY(parent) + CONFIG.boxHeight;
+
+            fam.children.forEach(childId => {
                 const child = indMap[childId];
                 if (!child) return;
 
+                // Child anchor: Left edge, middle of height
                 const endX = getX(child.birthYear);
                 const endY = getY(child) + (CONFIG.boxHeight / 2);
 
                 const path = document.createElementNS(ns, "path");
-                // Cubic Bezier: M startX startY C cp1x cp1y, cp2x cp2y, endX endY
-                // Control points: adjust curvature
-                const cp1X = startX + 50;
-                const cp1Y = startY;
-                const cp2X = endX - 50;
+                
+                // Curve logic: Down then Right
+                // M startX startY
+                // C startX (startY + endY)/2, startX (startY + endY)/2, startX endY ?? No
+                // Let's try a simple Bezier
+                // Control point 1: Below start
+                // Control point 2: Left of end
+                
+                const cp1X = startX;
+                const cp1Y = endY; // Go down to child's level
+                const cp2X = (startX + endX) / 2; 
                 const cp2Y = endY;
 
-                const d = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+                // If child is to the right of the anchor
+                const d = `M ${startX} ${startY} C ${startX} ${startY + 20}, ${endX - 20} ${endY}, ${endX} ${endY}`;
+                
                 path.setAttribute("d", d);
-                path.setAttribute("class", "connection-line");
+                path.setAttribute("class", "connection-line child-line");
                 connectionsGroup.appendChild(path);
             });
         });
+
         svg.appendChild(connectionsGroup);
 
-        // Draw Individuals
+        // Draw Individuals (Bricks)
         const boxesGroup = document.createElementNS(ns, "g");
-        individuals.forEach(ind => {
+        orderedIndividuals.forEach(ind => {
             const g = document.createElementNS(ns, "g");
             g.setAttribute("class", "person-box");
             g.setAttribute("transform", `translate(${getX(ind.birthYear)}, ${getY(ind)})`);
             
             // Box
             const rect = document.createElementNS(ns, "rect");
-            const w = getWidth(ind);
-            const h = CONFIG.boxHeight;
-            rect.setAttribute("width", w);
-            rect.setAttribute("height", h);
-            rect.setAttribute("rx", 6); // Rounded corners
+            rect.setAttribute("width", ind.width);
+            rect.setAttribute("height", CONFIG.boxHeight);
+            rect.setAttribute("rx", 4);
             rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
             g.appendChild(rect);
 
-            // ID Badge
-            const badgeSize = 16;
+            // ID Badge (Right edge)
+            const badgeSize = 14;
             const badge = document.createElementNS(ns, "rect");
-            badge.setAttribute("x", w - badgeSize);
+            badge.setAttribute("x", ind.width - badgeSize);
             badge.setAttribute("y", 0);
             badge.setAttribute("width", badgeSize);
             badge.setAttribute("height", badgeSize);
             badge.setAttribute("class", "id-badge");
-            // Rounded top-right corner only? or simple square
-            badge.setAttribute("rx", 0); 
             g.appendChild(badge);
 
             const idText = document.createElementNS(ns, "text");
-            idText.setAttribute("x", w - (badgeSize/2));
+            idText.setAttribute("x", ind.width - (badgeSize/2));
             idText.setAttribute("y", badgeSize/2);
             idText.setAttribute("class", "id-text");
             idText.textContent = ind.displayId;
             g.appendChild(idText);
 
-            // Name
-            const name = document.createElementNS(ns, "text");
-            name.setAttribute("x", 8);
-            name.setAttribute("y", 16);
-            name.setAttribute("class", "person-name");
-            // Truncate if too long?
-            name.textContent = ind.name.replace(/\//g, '');
-            g.appendChild(name);
-
-            // Dates
-            const dates = document.createElementNS(ns, "text");
-            dates.setAttribute("x", 8);
-            dates.setAttribute("y", 28);
-            dates.setAttribute("class", "person-dates");
-            
-            // Format places
-            let bPlace = ind.birthPlace ? ` ${ind.birthPlace}` : '';
-            let dPlace = ind.deathPlace ? ` ${ind.deathPlace}` : '';
-            // Shorten places if needed
-            
-            dates.textContent = `${ind.birthYear}${bPlace} - ${ind.deathYear}${dPlace}`;
-            g.appendChild(dates);
-            
-            // Click Handler (Highlight)
-            g.addEventListener('click', () => {
-                alert(`ID: ${ind.id}\nName: ${ind.name}`);
-            });
+            // Text content
+            const text = document.createElementNS(ns, "text");
+            text.setAttribute("x", 5);
+            text.setAttribute("y", CONFIG.boxHeight / 2);
+            text.setAttribute("class", "person-text");
+            text.setAttribute("dominant-baseline", "central");
+            text.textContent = ind.displayText;
+            g.appendChild(text);
 
             boxesGroup.appendChild(g);
         });
@@ -427,11 +497,6 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         return ind.rowIndex * CONFIG.rowHeight + CONFIG.paddingY;
     }
 
-    function getWidth(ind) {
-        let w = (ind.deathYear - ind.birthYear) * CONFIG.pixelsPerYear;
-        if (w < 120) w = 120; // Minimum width for readability
-        return w;
-    }
 
 </script>
 
