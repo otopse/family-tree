@@ -272,58 +272,68 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding-bottom: 4px; /* Slight padding at bottom */
   }
 
   .record-id {
     position: absolute;
-    top: 0;
-    left: 0;
+    bottom: 0;
+    right: 0;
+    top: auto;
+    left: auto;
     background: #000;
     color: #fff;
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 1px 6px;
+    font-size: 10px;
     font-weight: bold;
-    border-bottom-right-radius: 6px;
+    border-top-left-radius: 6px;
     z-index: 10;
+    line-height: 1.2;
   }
 
   .record-row {
-    min-height: 36px;
-    padding: 6px 12px;
-    border-bottom: 1px solid #f3f4f6;
+    padding: 1px 8px; /* Very compact padding */
     display: flex;
     align-items: center;
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.3;
   }
 
   .father-row {
-    /* Add padding to avoid ID badge overlap */
-    padding-left: 40px; 
-    background-color: #f9fafb; /* Slight background for parents? Optional. Let's keep white as per "minimal" vibe */
+    padding-top: 6px; /* A bit more top padding for the first element */
     background-color: white;
   }
   
   .mother-row {
-    border-bottom: 1px solid #f3f4f6;
+    /* No border, just tight stacking */
   }
 
   .children-list {
     display: flex;
     flex-direction: column;
     background-color: #fff;
-    padding: 4px 0;
+    padding: 0;
+    margin-top: 2px;
   }
   
   .child-row {
-    padding: 4px 12px;
+    padding: 1px 8px;
     font-size: 13px;
     color: #4b5563;
+    line-height: 1.3;
   }
 
   .empty-placeholder {
     display: inline-block;
     width: 100%;
-    height: 100%;
+    min-height: 18px; /* Height of one text line */
+  }
+
+  .person-name {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .tree-canvas-placeholder {
