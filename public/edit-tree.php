@@ -43,20 +43,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
 }
 
-// Fetch records for this tree
-$records = [];
-$elements = [];
+// ---------------------------------------------------------
+// DATA FETCHING & PROCESSING LOGIC
+// ---------------------------------------------------------
+
+$viewData = [];
+
 try {
-  // Fetch records
+  // Fetch raw records
   $stmt = db()->prepare(
-    'SELECT * FROM ft_records WHERE tree_id = :tree_id ORDER BY created DESC'
+    'SELECT * FROM ft_records WHERE tree_id = :tree_id'
   );
   $stmt->execute(['tree_id' => $treeId]);
-  $records = $stmt->fetchAll();
+  $rawRecords = $stmt->fetchAll();
 
-  if (!empty($records)) {
-    // Fetch elements for these records
-    $recordIds = array_column($records, 'id');
+  if (!empty($rawRecords)) {
+    // Fetch elements
+    $recordIds = array_column($rawRecords, 'id');
     $inQuery = implode(',', array_fill(0, count($recordIds), '?'));
     $stmt = db()->prepare(
       "SELECT * FROM ft_elements WHERE record_id IN ($inQuery) ORDER BY sort_order ASC"
@@ -64,36 +67,174 @@ try {
     $stmt->execute($recordIds);
     $allElements = $stmt->fetchAll();
 
-    // Group elements by record_id
+    // Group elements
+    $elementsByRecord = [];
     foreach ($allElements as $el) {
-      $elements[$el['record_id']][] = $el;
+      $elementsByRecord[$el['record_id']][] = $el;
     }
+
+    // Process each record to apply business logic (date imputation)
+    foreach ($rawRecords as $record) {
+      $els = $elementsByRecord[$record['id']] ?? [];
+      
+      $man = null;
+      $woman = null;
+      $children = [];
+
+      foreach ($els as $e) {
+        if ($e['type'] === 'MUZ') $man = $e;
+        elseif ($e['type'] === 'ZENA') $woman = $e;
+        elseif ($e['type'] === 'DIETA') $children[] = $e;
+      }
+
+      // Helper to safely get year from YYYY-MM-DD or YYYY
+      $getYear = function($dateStr) {
+        if (empty($dateStr)) return null;
+        $ts = strtotime($dateStr);
+        return $ts ? (int)date('Y', $ts) : null;
+      };
+
+      // 1. Extract Real Years
+      $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
+      $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
+      
+      $manFictional = false;
+      $womanFictional = false;
+
+      // 2. Impute Parents
+      // "Ak je známy dátum narodenia manžela ale nie ženy, potom doplň rok narodenia ženy ako manžel +10 rokov"
+      if ($manYear !== null && $womanYear === null && $woman) {
+        $womanYear = $manYear + 10;
+        $womanFictional = true;
+      }
+      // "Ak je známy dátum narodenia ženy ale nie manžela, potom manžel=žena-10 rokov"
+      elseif ($womanYear !== null && $manYear === null && $man) {
+        $manYear = $womanYear - 10;
+        $manFictional = true;
+      }
+
+      // 3. Impute Children
+      $processedChildren = [];
+      $prevChildYear = null;
+
+      foreach ($children as $index => $child) {
+        $childYear = $getYear($child['birth_date'] ?? '');
+        $childFictional = false;
+
+        if ($childYear === null) {
+          // "Ak je známy dátum narodenia manželky ale neznámy dátum narodenia prvého dieťaťa, potom dieťa=mama+20"
+          if ($index === 0 && $womanYear !== null) {
+            $childYear = $womanYear + 20;
+            $childFictional = true;
+          }
+          // "Ak je známy dátum narodenia predchádzajúceho dieťaťa, potom ďalšie dieťa=predchádzajúce+3 roky"
+          elseif ($index > 0 && $prevChildYear !== null) {
+            $childYear = $prevChildYear + 3;
+            $childFictional = true;
+          }
+        }
+
+        // Save processed child
+        $processedChildren[] = [
+          'data' => $child,
+          'year' => $childYear,
+          'is_fictional' => $childFictional
+        ];
+
+        // Update tracker for next iteration
+        if ($childYear !== null) {
+          $prevChildYear = $childYear;
+        }
+      }
+
+      // Prepare final object for view
+      $processedMan = $man ? ['data' => $man, 'year' => $manYear, 'is_fictional' => $manFictional] : null;
+      $processedWoman = $woman ? ['data' => $woman, 'year' => $womanYear, 'is_fictional' => $womanFictional] : null;
+
+      // Determine Sort Key (Man's year, fallback to Woman's year, fallback to 9999)
+      $sortYear = $manYear ?? ($womanYear ?? 9999);
+
+      $viewData[] = [
+        'record_id' => $record['id'],
+        'man' => $processedMan,
+        'woman' => $processedWoman,
+        'children' => $processedChildren,
+        'sort_year' => $sortYear
+      ];
+    }
+
+    // 4. Sort
+    // "Pri vyreportovaní dlaždíc ich usporiadaj od najmenšieho dátumu narodenia manžela po najvyšší."
+    usort($viewData, function($a, $b) {
+      return $a['sort_year'] <=> $b['sort_year'];
+    });
   }
+
 } catch (PDOException $e) {
-  // Tables might not exist yet
+  // Silent fail or log
 }
 
-// Helper to format element display
-function format_element(array $el): string {
-  $text = e($el['full_name']);
+// ---------------------------------------------------------
+// HELPER FOR VIEW
+// ---------------------------------------------------------
+function render_person_html(?array $personData): string {
+  if (!$personData) {
+    return '<span class="empty-placeholder">&nbsp;</span>';
+  }
+
+  $el = $personData['data'];
+  $year = $personData['year'];
+  $isFictional = $personData['is_fictional'];
   
-  $dates = [];
-  if (!empty($el['birth_date'])) {
-    $b = date('Y.m.d', strtotime($el['birth_date']));
-    if (!empty($el['birth_place'])) $b .= ' ' . e($el['birth_place']);
-    $dates[] = $b;
-  }
-  if (!empty($el['death_date'])) {
-    $d = date('Y.m.d', strtotime($el['death_date']));
-    if (!empty($el['death_place'])) $d .= ' ' . e($el['death_place']);
-    $dates[] = $d;
+  $name = e($el['full_name']);
+  $dateStr = '';
+
+  // Calculate Display Date
+  if ($year) {
+    $birthStr = (string)$year; // We only use year for imputed, or if that's all we have
+    
+    // If we have a full real date, use it instead of just the year?
+    // The prompt implies checking 'is_fictional'.
+    // If it's NOT fictional, we might want the original format from DB if available.
+    // However, to keep it consistent with the "year calculation" logic, let's use the DB date if real,
+    // and just the Year if fictional.
+    
+    if (!$isFictional && !empty($el['birth_date'])) {
+      $birthStr = date('Y.m.d', strtotime($el['birth_date']));
+    }
+
+    $deathStr = '';
+    if (!empty($el['death_date'])) {
+      $deathStr = date('Y.m.d', strtotime($el['death_date']));
+    }
+
+    // Brackets logic
+    // "Ak je is_fictional_birth_date potom zátvorka pred dátumom na dlaždici nebude okrúhla ( ale hranatá ["
+    // "Ak je otváracia zátvorka hranatá a chýba dátum úmrtia, potom aj zatváracia z´tvorka bude hranatá ]"
+    
+    $open = $isFictional ? '[' : '(';
+    $close = $isFictional ? ']' : ')'; 
+    
+    // Standard round brackets logic usually: (Born - Died)
+    // Mixed logic per prompt:
+    // Fictional: [Born...
+    // If Death exists: [Born - Died] (Assumed matching brackets)
+    // If Death missing: [Born]
+    
+    // If NOT fictional: (Born - Died) or (Born)
+
+    if ($deathStr) {
+       $dateStr = "{$open}{$birthStr} - {$deathStr}{$close}";
+    } else {
+       $dateStr = "{$open}{$birthStr}{$close}";
+    }
+  } elseif (!empty($el['death_date'])) {
+      // Only death date known
+      $d = date('Y.m.d', strtotime($el['death_date']));
+      $dateStr = "(? - {$d})";
   }
 
-  if (!empty($dates)) {
-    $text .= ' (' . implode('-', $dates) . ')';
-  }
-
-  return $text;
+  return '<span class="person-name">' . $name . ' ' . $dateStr . '</span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -127,32 +268,22 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     </div>
 
     <div class="masonry-grid">
-      <?php if (empty($records)): ?>
+      <?php if (empty($viewData)): ?>
         <div class="empty-state">
           <p>Tento rodokmeň zatiaľ neobsahuje žiadne záznamy (rodiny).</p>
           <p>Začnite pridaním nového záznamu.</p>
         </div>
       <?php else: ?>
-        <?php foreach ($records as $record): ?>
-          <?php
-            $recordElements = $elements[$record['id']] ?? [];
-            $man = null;
-            $woman = null;
-            $children = [];
-            
-            foreach ($recordElements as $el) {
-              if ($el['type'] === 'MUZ') $man = $el;
-              elseif ($el['type'] === 'ZENA') $woman = $el;
-              elseif ($el['type'] === 'DIETA') $children[] = $el;
-            }
-          ?>
+        <?php $counter = 1; ?>
+        <?php foreach ($viewData as $row): ?>
           <div class="record-card">
-            <div class="record-id">#<?= $record['id'] ?></div>
+            <!-- Counter ID instead of DB ID -->
+            <div class="record-id">#<?= $counter++ ?></div>
             
             <!-- Father Row -->
             <div class="record-row father-row">
-              <?php if ($man): ?>
-                <span class="person-name"><?= format_element($man) ?></span>
+              <?php if ($row['man']): ?>
+                <?= render_person_html($row['man']) ?>
               <?php else: ?>
                 <span class="empty-placeholder">&nbsp;</span>
               <?php endif; ?>
@@ -160,8 +291,8 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
 
             <!-- Mother Row -->
             <div class="record-row mother-row">
-              <?php if ($woman): ?>
-                <span class="person-name"><?= format_element($woman) ?></span>
+              <?php if ($row['woman']): ?>
+                <?= render_person_html($row['woman']) ?>
               <?php else: ?>
                 <span class="empty-placeholder">&nbsp;</span>
               <?php endif; ?>
@@ -169,9 +300,9 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
 
             <!-- Children List -->
             <div class="children-list">
-              <?php foreach ($children as $child): ?>
+              <?php foreach ($row['children'] as $child): ?>
                 <div class="child-row">
-                  <span class="person-name"><?= format_element($child) ?></span>
+                  <?= render_person_html($child) ?>
                 </div>
               <?php endforeach; ?>
             </div>
