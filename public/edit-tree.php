@@ -224,11 +224,7 @@ function render_person_html(?array $personData): string {
     // If NOT fictional: (Born - Died) or (Born)
 
     if ($isFictional) {
-      // Fictional: [YYYY] or [YYYY.MM.DD] if somehow exact
-      // Prompt says: "ak je vypočítaný presný dátum narodenia... tak [YYYY.MM.DD], inak len [YYYY]"
-      // Our calculation logic currently only produces Years.
-      // And critical rule: "nesmie sa už nikdy zobraziť fiktívne úmrtie"
-      
+      // Fictional: [YYYY]
       $dateStr = "{$open}{$birthStr}{$close}";
     } else {
       // Real dates: (Born - Died) or (Born)
