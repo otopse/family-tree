@@ -126,90 +126,57 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
       </div>
     </div>
 
-    <div class="records-grid">
+    <div class="masonry-grid">
       <?php if (empty($records)): ?>
         <div class="empty-state">
           <p>Tento rodokmeň zatiaľ neobsahuje žiadne záznamy (rodiny).</p>
           <p>Začnite pridaním nového záznamu.</p>
         </div>
       <?php else: ?>
-        <table class="data-table record-table">
-          <thead>
-            <tr>
-              <th style="width: 50px;">ID</th>
-              <th>Muž</th>
-              <th>Žena</th>
-              <th>Deti</th>
-              <th style="width: 120px;">Akcie</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($records as $record): ?>
-              <?php
-                $recordElements = $elements[$record['id']] ?? [];
-                $man = null;
-                $woman = null;
-                $children = [];
-                
-                foreach ($recordElements as $el) {
-                  if ($el['type'] === 'MUZ') $man = $el;
-                  elseif ($el['type'] === 'ZENA') $woman = $el;
-                  elseif ($el['type'] === 'DIETA') $children[] = $el;
-                }
-              ?>
-              <tr>
-                <td>#<?= $record['id'] ?></td>
-                <td>
-                  <?php if ($man): ?>
-                    <div class="person-cell">
-                      <span class="person-icon">👨</span>
-                      <div class="person-actions">
-                        <button class="btn-tiny" title="Editovať">✏️</button>
-                        <button class="btn-tiny" title="Zmazať">🗑️</button>
-                      </div>
-                      <span class="person-info"><?= format_element($man) ?></span>
-                    </div>
-                  <?php else: ?>
-                    <button class="btn-dashed">+ Pridať muža</button>
-                  <?php endif; ?>
-                </td>
-                <td>
-                  <?php if ($woman): ?>
-                    <div class="person-cell">
-                      <span class="person-icon">👩</span>
-                      <div class="person-actions">
-                        <button class="btn-tiny" title="Editovať">✏️</button>
-                        <button class="btn-tiny" title="Zmazať">🗑️</button>
-                      </div>
-                      <span class="person-info"><?= format_element($woman) ?></span>
-                    </div>
-                  <?php else: ?>
-                    <button class="btn-dashed">+ Pridať ženu</button>
-                  <?php endif; ?>
-                </td>
-                <td>
-                  <div class="children-list">
-                    <?php foreach ($children as $child): ?>
-                      <div class="person-cell child-cell">
-                        <span class="person-icon">👶</span>
-                        <div class="person-actions">
-                          <button class="btn-tiny" title="Editovať">✏️</button>
-                          <button class="btn-tiny" title="Zmazať">🗑️</button>
-                        </div>
-                        <span class="person-info"><?= format_element($child) ?></span>
-                      </div>
-                    <?php endforeach; ?>
-                    <button class="btn-dashed btn-small">+ Dieťa</button>
-                  </div>
-                </td>
-                <td>
-                  <button class="btn-icon" title="Editovať záznam">✏️</button>
-                  <button class="btn-icon" title="Zmazať záznam">🗑️</button>
-                </td>
-              </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
+        <?php foreach ($records as $record): ?>
+          <?php
+            $recordElements = $elements[$record['id']] ?? [];
+            $man = null;
+            $woman = null;
+            $children = [];
+            
+            foreach ($recordElements as $el) {
+              if ($el['type'] === 'MUZ') $man = $el;
+              elseif ($el['type'] === 'ZENA') $woman = $el;
+              elseif ($el['type'] === 'DIETA') $children[] = $el;
+            }
+          ?>
+          <div class="record-card">
+            <div class="record-id">#<?= $record['id'] ?></div>
+            
+            <!-- Father Row -->
+            <div class="record-row father-row">
+              <?php if ($man): ?>
+                <span class="person-name"><?= format_element($man) ?></span>
+              <?php else: ?>
+                <span class="empty-placeholder">&nbsp;</span>
+              <?php endif; ?>
+            </div>
+
+            <!-- Mother Row -->
+            <div class="record-row mother-row">
+              <?php if ($woman): ?>
+                <span class="person-name"><?= format_element($woman) ?></span>
+              <?php else: ?>
+                <span class="empty-placeholder">&nbsp;</span>
+              <?php endif; ?>
+            </div>
+
+            <!-- Children List -->
+            <div class="children-list">
+              <?php foreach ($children as $child): ?>
+                <div class="child-row">
+                  <span class="person-name"><?= format_element($child) ?></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -278,34 +245,85 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     margin-bottom: 16px;
   }
 
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
+  /* Masonry Grid Styles */
+  .masonry-grid {
+    column-count: 1;
+    column-gap: 16px;
+  }
+  
+  @media (min-width: 640px) {
+    .masonry-grid { column-count: 2; }
+  }
+  @media (min-width: 1024px) {
+    .masonry-grid { column-count: 3; }
+  }
+  @media (min-width: 1440px) {
+    .masonry-grid { column-count: 4; }
+  }
+
+  .record-card {
+    break-inside: avoid;
     background: white;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
+    margin-bottom: 16px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
 
-  .data-table th, .data-table td {
-    padding: 12px 16px;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .data-table th {
-    background: var(--bg-secondary);
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  .badge {
-    background: #e0e7ff;
-    color: #4338ca;
+  .record-id {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: #000;
+    color: #fff;
     padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.85rem;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: bold;
+    border-bottom-right-radius: 6px;
+    z-index: 10;
+  }
+
+  .record-row {
+    min-height: 36px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+  }
+
+  .father-row {
+    /* Add padding to avoid ID badge overlap */
+    padding-left: 40px; 
+    background-color: #f9fafb; /* Slight background for parents? Optional. Let's keep white as per "minimal" vibe */
+    background-color: white;
+  }
+  
+  .mother-row {
+    border-bottom: 1px solid #f3f4f6;
+  }
+
+  .children-list {
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    padding: 4px 0;
+  }
+  
+  .child-row {
+    padding: 4px 12px;
+    font-size: 13px;
+    color: #4b5563;
+  }
+
+  .empty-placeholder {
+    display: inline-block;
+    width: 100%;
+    height: 100%;
   }
 
   .tree-canvas-placeholder {
@@ -318,84 +336,6 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
-  }
-
-  /* Record View Styles */
-  .record-table td {
-    vertical-align: top;
-  }
-
-  .person-cell {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-    position: relative;
-  }
-
-  .person-cell .person-actions {
-    display: flex;
-    margin-left: 8px;
-    opacity: 0.4;
-    transition: opacity 0.2s;
-  }
-
-  .person-cell:hover .person-actions {
-    opacity: 1;
-  }
-
-  .person-actions {
-    display: flex;
-    gap: 4px;
-  }
-
-  .btn-tiny {
-    padding: 2px 4px;
-    font-size: 0.7rem;
-    border: 1px solid var(--border-color);
-    background: white;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .btn-tiny:hover {
-    background: var(--bg-secondary);
-  }
-
-  .btn-dashed {
-    border: 1px dashed var(--border-color);
-    background: none;
-    color: var(--text-secondary);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-  }
-
-  .btn-dashed:hover {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border-style: solid;
-  }
-
-  .btn-small {
-    font-size: 0.8rem;
-    padding: 2px 6px;
-    margin-top: 4px;
-    width: auto;
-  }
-
-  .children-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .child-cell {
-    padding-left: 8px;
-    border-left: 2px solid var(--border-color);
   }
 
   @keyframes fadeIn {
