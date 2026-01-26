@@ -77,6 +77,38 @@ try {
     $debugLog = __DIR__ . '/gedcom_debug.log';
     file_put_contents($debugLog, "\n\n=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
 
+    // ---------------------------------------------------------
+    // 3. Global Date Lookup (Iterative)
+    // ---------------------------------------------------------
+    // We need to fill in missing dates by looking up the same person in other records
+    // (e.g. a child in one family is a parent in another).
+    
+    // Build a global map of Person ID -> Year
+    $globalYears = [];
+    
+    // Helper to scan all records and collect known years
+    $collectGlobalYears = function() use (&$globalYears, $elementsByRecord, $getYear) {
+      $foundNew = false;
+      foreach ($elementsByRecord as $recId => $els) {
+        foreach ($els as $e) {
+          $gedId = $e['gedcom_id'] ?? null;
+          if (!$gedId) continue;
+          
+          $y = $getYear($e['birth_date'] ?? '');
+          if ($y !== null) {
+            if (!isset($globalYears[$gedId])) {
+              $globalYears[$gedId] = $y;
+              $foundNew = true;
+            }
+          }
+        }
+      }
+      return $foundNew;
+    };
+
+    // Initial collection
+    $collectGlobalYears();
+
     // Process each record to apply business logic (date imputation)
     foreach ($rawRecords as $record) {
       $els = $elementsByRecord[$record['id']] ?? [];
@@ -93,26 +125,24 @@ try {
 
       $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
 
-      // Helper to safely get year from YYYY.MM.DD, YYYY-MM-DD, or YYYY
-      $getYear = function($dateStr) {
-        if (empty($dateStr)) return null;
-        // Clean up date string
-        $dateStr = trim($dateStr);
-        
-        // Match start with 4 digits (YYYY...)
-        if (preg_match('/^(\d{4})/', $dateStr, $m)) {
-          return (int)$m[1];
-        }
-        
-        // Fallback to strtotime
-        $ts = strtotime($dateStr);
-        return $ts ? (int)date('Y', $ts) : null;
-      };
-
-      // 1. Extract Real Years
+      // 1. Extract Real Years (Local)
       $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
       $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
       
+      // 2. Global Lookup if missing
+      if ($manYear === null && $man && isset($man['gedcom_id'])) {
+          if (isset($globalYears[$man['gedcom_id']])) {
+              $manYear = $globalYears[$man['gedcom_id']];
+              $logMsg .= "  [Global] Man found in other record: $manYear\n";
+          }
+      }
+      if ($womanYear === null && $woman && isset($woman['gedcom_id'])) {
+          if (isset($globalYears[$woman['gedcom_id']])) {
+              $womanYear = $globalYears[$woman['gedcom_id']];
+              $logMsg .= "  [Global] Woman found in other record: $womanYear\n";
+          }
+      }
+
       $logMsg .= "  [Raw] Man: " . ($man ? ($man['birth_date']??'empty') : 'N/A') . " -> Year: " . ($manYear ?? 'null') . "\n";
       $logMsg .= "  [Raw] Woman: " . ($woman ? ($woman['birth_date']??'empty') : 'N/A') . " -> Year: " . ($womanYear ?? 'null') . "\n";
 
@@ -130,6 +160,13 @@ try {
       $oldestChildYear = null;
       foreach ($children as $child) {
         $cy = $getYear($child['birth_date'] ?? '');
+        
+        // Global lookup for child
+        if ($cy === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
+            $cy = $globalYears[$child['gedcom_id']];
+            $logMsg .= "  [Global] Child ({$child['full_name']}) found: $cy\n";
+        }
+
         $logMsg .= "  [Raw] Child ({$child['full_name']}): " . ($child['birth_date']??'empty') . " -> Year: " . ($cy ?? 'null') . "\n";
         if ($cy !== null) {
           if ($oldestChildYear === null || $cy < $oldestChildYear) {
@@ -173,6 +210,12 @@ try {
 
       foreach ($children as $index => $child) {
         $childYear = $getYear($child['birth_date'] ?? '');
+        
+        // Global lookup again (if not done in loop above or just to be safe)
+        if ($childYear === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
+            $childYear = $globalYears[$child['gedcom_id']];
+        }
+
         $childFictional = false;
 
         if ($childYear === null) {
