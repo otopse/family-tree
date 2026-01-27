@@ -521,6 +521,11 @@ debugLog("JavaScript script tag opened");
         debugLog(`=== initTree() called ===`);
         debugLog(`Data: ${individuals.length} individuals, ${families.length} families`);
         
+        // Constants used throughout the function
+        const badgeWidth = 22;
+        const badgeHeight = 16;
+        const badgeMargin = 4;
+        
         const wrapper = document.getElementById('tree-wrapper');
         const loading = document.getElementById('loading');
         
@@ -575,8 +580,6 @@ debugLog("JavaScript script tag opened");
 
         // Calculate Widths - use same format as edit-tree.php
         debugLog("Step 3: Calculating widths...");
-        const badgeWidth = 22;
-        const badgeMargin = 4;
         
         let widthErrors = 0;
         individuals.forEach(ind => {
@@ -761,9 +764,6 @@ debugLog("JavaScript script tag opened");
         // Boxes
         debugLog("Step 9: Creating person boxes...");
         const boxesGroup = document.createElementNS(ns, "g");
-        const badgeWidth = 22;
-        const badgeHeight = 16;
-        const badgeMargin = 4;
         
         let boxErrors = 0;
         orderedIndividuals.forEach((ind, idx) => {
