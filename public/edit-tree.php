@@ -233,32 +233,35 @@ function render_person_html(?array $el, int $seqNum): string {
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
-?>
-
-<div class="container-fluid">
+debugLog("=== RENDERING PHASE START ===");
+debugLog("About to render container-fluid. Auth-page should have padding: 0");
+debugLog("Current output buffer length: " . ob_get_length());
+?><div class="container-fluid">
   <div class="editor-header">
-    <div style="display: flex; align-items: center; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 16px; width: 100%;">
       <a href="/family-trees.php" class="btn-secondary" style="padding: 6px 12px;">← Späť</a>
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
-      <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px; margin-left: auto;">Export PDF</button>
+      
+      <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+        <form method="post" action="/edit-tree.php?id=<?= $treeId ?>" style="margin: 0; display: inline-block;">
+          <input type="hidden" name="action" value="add_record">
+          <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
+        </form>
+        <div class="search-box" style="display: inline-block;">
+          <input type="text" placeholder="Hľadať..." class="form-control" id="search-input" style="width: 150px; padding: 4px 8px;">
+        </div>
+        <a href="/edit-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px; background-color: var(--primary-color); color: white; cursor: default; pointer-events: none; opacity: 0.8;">Editovať</a>
+        <a href="/view-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px;">Zobraziť</a>
+        <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
+      </div>
     </div>
   </div><?php
   debugLog("Editor header rendered. Export PDF button should be present.");
   debugLog("Records processed: " . count($viewData));
-  debugLog("=== EDIT-TREE PHP DONE ===");
+  debugLog("About to render split-view-container");
   ?><div class="split-view-container">
     <!-- Left: Record View (Masonry) -->
     <div id="record-view" class="split-pane left-pane">
-      <div class="toolbar">
-        <form method="post" action="/edit-tree.php?id=<?= $treeId ?>">
-          <input type="hidden" name="action" value="add_record">
-          <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
-        </form>
-        <div class="search-box">
-          <input type="text" placeholder="Hľadať..." class="form-control" style="width: 150px; padding: 4px 8px;">
-        </div>
-      </div>
-
       <div class="masonry-grid-single-col">
         <?php if (empty($viewData)): ?>
           <div class="empty-state">
@@ -305,7 +308,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     </div>
   </div>
 </div>
-
+<?php
+debugLog("Container-fluid closing tag rendered");
+debugLog("About to render inline styles");
+debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
+?>
 <style>
   html, body {
     height: 100%;
@@ -315,7 +322,10 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   }
   
   /* Override auth-page padding for edit-tree - must override global .auth-page padding: 80px 0 */
-  body .auth-page {
+  /* Use highest specificity to override global styles */
+  html body main.auth-page,
+  body main.auth-page,
+  main.auth-page {
     padding: 0 !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
@@ -328,11 +338,13 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     margin-right: 0 !important;
     height: calc(100vh - 72px) !important; /* Subtract navbar height */
     min-height: calc(100vh - 72px) !important;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    max-height: calc(100vh - 72px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
     position: relative;
-    background: white; /* Match container background */
+    background: white !important; /* Match container background */
+    box-sizing: border-box !important;
   }
   
   /* Hide footer on edit-tree page */
@@ -345,11 +357,16 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     display: flex;
     flex-direction: column;
     padding: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
     margin: 0 !important;
     margin-top: 0 !important;
+    margin-bottom: 0 !important;
     min-height: 0; /* Important for flex children */
     overflow: hidden;
     height: 100%;
+    box-sizing: border-box;
+    align-self: stretch; /* Fill parent */
   }
   
   .editor-header {
@@ -360,11 +377,38 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     margin-bottom: 0 !important;
     border-bottom: 1px solid var(--border-color);
     background: white;
+    box-sizing: border-box;
+  }
+  
+  .editor-header > div {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+  }
+  
+  .editor-header h1 {
+    flex: 0 0 auto;
+  }
+  
+  .editor-header .search-box {
+    display: inline-flex;
+    align-items: center;
+  }
+  
+  .editor-header form {
+    margin: 0;
+    display: inline-block;
   }
   
   .split-view-container {
+    flex: 1;
     margin-top: 0 !important;
     padding-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    min-height: 0;
+    box-sizing: border-box;
   }
 
   .view-toggles { display: none; } /* Hide toggles as we show both */
@@ -556,6 +600,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     box-shadow: 0 0 0 2px #1890ff;
   }
   
+  .person-name.search-highlight {
+    background-color: #fff3cd;
+    font-weight: bold;
+  }
+  
   .record-card.selected {
     box-shadow: 0 0 0 3px #1890ff;
     transition: box-shadow 0.2s;
@@ -581,7 +630,459 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
 </style>
 
 <script>
+// Log immediately when script loads (before DOM ready)
+console.log('[EDIT-TREE] Script loaded at:', new Date().toISOString());
+console.log('[EDIT-TREE] Document ready state:', document.readyState);
+
 document.addEventListener('DOMContentLoaded', function() {
+  console.log('[EDIT-TREE] DOMContentLoaded event fired at:', new Date().toISOString());
+  // Enhanced diagnostic logging for layout issues
+  console.log('[EDIT-TREE] ========================================');
+  console.log('[EDIT-TREE] DOM Loaded - Starting comprehensive diagnostics');
+  console.log('[EDIT-TREE] ========================================');
+  
+  // Get all relevant elements
+  const body = document.body;
+  const html = document.documentElement;
+  const navbar = document.querySelector('.navbar');
+  const authPage = document.querySelector('.auth-page');
+  const containerFluid = document.querySelector('.container-fluid');
+  const editorHeader = document.querySelector('.editor-header');
+  const splitView = document.querySelector('.split-view-container');
+  
+  // Log viewport and body dimensions
+  console.log('[EDIT-TREE] Viewport dimensions:', {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    scrollHeight: document.documentElement.scrollHeight
+  });
+  
+  if (body) {
+    const bodyStyles = window.getComputedStyle(body);
+    const bodyRect = body.getBoundingClientRect();
+    console.log('[EDIT-TREE] body computed styles:', {
+      margin: bodyStyles.margin,
+      padding: bodyStyles.padding,
+      height: bodyStyles.height,
+      overflow: bodyStyles.overflow,
+      boxSizing: bodyStyles.boxSizing
+    });
+    console.log('[EDIT-TREE] body getBoundingClientRect:', bodyRect);
+  }
+  
+  if (html) {
+    const htmlStyles = window.getComputedStyle(html);
+    console.log('[EDIT-TREE] html computed styles:', {
+      margin: htmlStyles.margin,
+      padding: htmlStyles.padding,
+      height: htmlStyles.height,
+      overflow: htmlStyles.overflow
+    });
+  }
+  
+  // Log navbar
+  if (navbar) {
+    const navStyles = window.getComputedStyle(navbar);
+    const navRect = navbar.getBoundingClientRect();
+    console.log('[EDIT-TREE] navbar computed styles:', {
+      height: navStyles.height,
+      marginBottom: navStyles.marginBottom,
+      paddingBottom: navStyles.paddingBottom,
+      position: navStyles.position
+    });
+    console.log('[EDIT-TREE] navbar getBoundingClientRect:', navRect);
+    console.log('[EDIT-TREE] navbar height (actual):', navRect.height + 'px');
+  }
+  
+  // Log auth-page with full details
+  if (authPage) {
+    const authStyles = window.getComputedStyle(authPage);
+    const authRect = authPage.getBoundingClientRect();
+    console.log('[EDIT-TREE] ===== auth-page DETAILED ANALYSIS =====');
+    console.log('[EDIT-TREE] auth-page computed styles:', {
+      padding: authStyles.padding,
+      paddingTop: authStyles.paddingTop,
+      paddingBottom: authStyles.paddingBottom,
+      paddingLeft: authStyles.paddingLeft,
+      paddingRight: authStyles.paddingRight,
+      margin: authStyles.margin,
+      marginTop: authStyles.marginTop,
+      marginBottom: authStyles.marginBottom,
+      marginLeft: authStyles.marginLeft,
+      marginRight: authStyles.marginRight,
+      height: authStyles.height,
+      minHeight: authStyles.minHeight,
+      maxHeight: authStyles.maxHeight,
+      display: authStyles.display,
+      flexDirection: authStyles.flexDirection,
+      overflow: authStyles.overflow,
+      boxSizing: authStyles.boxSizing,
+      position: authStyles.position,
+      background: authStyles.background
+    });
+    console.log('[EDIT-TREE] auth-page getBoundingClientRect:', {
+      top: authRect.top,
+      left: authRect.left,
+      bottom: authRect.bottom,
+      right: authRect.right,
+      width: authRect.width,
+      height: authRect.height
+    });
+    console.log('[EDIT-TREE] auth-page offsetTop:', authPage.offsetTop);
+    console.log('[EDIT-TREE] auth-page offsetHeight:', authPage.offsetHeight);
+    
+    // Check for whitespace in HTML
+    const authPageHTML = authPage.outerHTML.substring(0, 200);
+    console.log('[EDIT-TREE] auth-page HTML start (first 200 chars):', authPageHTML);
+    
+    // Check first child
+    const firstChild = authPage.firstElementChild;
+    if (firstChild) {
+      console.log('[EDIT-TREE] auth-page first child:', firstChild.tagName, firstChild.className);
+      const firstChildRect = firstChild.getBoundingClientRect();
+      console.log('[EDIT-TREE] auth-page first child getBoundingClientRect:', firstChildRect);
+      
+      // Check for text nodes (whitespace)
+      const firstTextNode = authPage.firstChild;
+      if (firstTextNode && firstTextNode.nodeType === 3) {
+        const textContent = firstTextNode.textContent;
+        console.warn('[EDIT-TREE] WARNING: Text node before first element:', JSON.stringify(textContent));
+        console.warn('[EDIT-TREE] Text node length:', textContent.length);
+      }
+    }
+  }
+  
+  // Log container-fluid with full details
+  if (containerFluid) {
+    const containerStyles = window.getComputedStyle(containerFluid);
+    const containerRect = containerFluid.getBoundingClientRect();
+    console.log('[EDIT-TREE] ===== container-fluid DETAILED ANALYSIS =====');
+    console.log('[EDIT-TREE] container-fluid computed styles:', {
+      padding: containerStyles.padding,
+      paddingTop: containerStyles.paddingTop,
+      paddingBottom: containerStyles.paddingBottom,
+      paddingLeft: containerStyles.paddingLeft,
+      paddingRight: containerStyles.paddingRight,
+      margin: containerStyles.margin,
+      marginTop: containerStyles.marginTop,
+      marginBottom: containerStyles.marginBottom,
+      marginLeft: containerStyles.marginLeft,
+      marginRight: containerStyles.marginRight,
+      height: containerStyles.height,
+      minHeight: containerStyles.minHeight,
+      maxHeight: containerStyles.maxHeight,
+      display: containerStyles.display,
+      flexDirection: containerStyles.flexDirection,
+      overflow: containerStyles.overflow,
+      boxSizing: containerStyles.boxSizing,
+      alignSelf: containerStyles.alignSelf,
+      flex: containerStyles.flex
+    });
+    console.log('[EDIT-TREE] container-fluid getBoundingClientRect:', {
+      top: containerRect.top,
+      left: containerRect.left,
+      bottom: containerRect.bottom,
+      right: containerRect.right,
+      width: containerRect.width,
+      height: containerRect.height
+    });
+    console.log('[EDIT-TREE] container-fluid offsetTop:', containerFluid.offsetTop);
+    console.log('[EDIT-TREE] container-fluid offsetHeight:', containerFluid.offsetHeight);
+    
+    // Check for whitespace before container-fluid
+    const containerHTML = containerFluid.outerHTML.substring(0, 200);
+    console.log('[EDIT-TREE] container-fluid HTML start (first 200 chars):', containerHTML);
+  }
+  
+  // Log editor-header
+  if (editorHeader) {
+    const headerStyles = window.getComputedStyle(editorHeader);
+    const headerRect = editorHeader.getBoundingClientRect();
+    console.log('[EDIT-TREE] editor-header computed styles:', {
+      padding: headerStyles.padding,
+      paddingTop: headerStyles.paddingTop,
+      paddingBottom: headerStyles.paddingBottom,
+      margin: headerStyles.margin,
+      marginTop: headerStyles.marginTop,
+      marginBottom: headerStyles.marginBottom,
+      height: headerStyles.height,
+      flex: headerStyles.flex
+    });
+    console.log('[EDIT-TREE] editor-header getBoundingClientRect:', headerRect);
+  }
+  
+  // Log split-view-container
+  if (splitView) {
+    const splitStyles = window.getComputedStyle(splitView);
+    const splitRect = splitView.getBoundingClientRect();
+    console.log('[EDIT-TREE] split-view-container computed styles:', {
+      padding: splitStyles.padding,
+      paddingTop: splitStyles.paddingTop,
+      paddingBottom: splitStyles.paddingBottom,
+      margin: splitStyles.margin,
+      marginTop: splitStyles.marginTop,
+      marginBottom: splitStyles.marginBottom,
+      height: splitStyles.height,
+      minHeight: splitStyles.minHeight,
+      flex: splitStyles.flex
+    });
+    console.log('[EDIT-TREE] split-view-container getBoundingClientRect:', splitRect);
+  }
+  
+  // ===== GAP ANALYSIS =====
+  console.log('[EDIT-TREE] ===== GAP ANALYSIS =====');
+  
+  // Gap between navbar and auth-page
+  if (navbar && authPage) {
+    const navRect = navbar.getBoundingClientRect();
+    const authRect = authPage.getBoundingClientRect();
+    const gap = authRect.top - navRect.bottom;
+    console.log('[EDIT-TREE] Gap between navbar.bottom and auth-page.top:', gap + 'px');
+    if (gap !== 0) {
+      console.warn('[EDIT-TREE] WARNING: Unexpected gap between navbar and auth-page!');
+    }
+  }
+  
+  // Gap between auth-page and container-fluid (THE MAIN ISSUE)
+  if (authPage && containerFluid) {
+    const authRect = authPage.getBoundingClientRect();
+    const containerRect = containerFluid.getBoundingClientRect();
+    const gap = containerRect.top - authRect.top;
+    const gapFromAuthContent = containerRect.top - (authRect.top + parseFloat(window.getComputedStyle(authPage).paddingTop));
+    console.log('[EDIT-TREE] ===== MAIN GAP ANALYSIS =====');
+    console.log('[EDIT-TREE] auth-page.top:', authRect.top + 'px');
+    console.log('[EDIT-TREE] container-fluid.top:', containerRect.top + 'px');
+    console.log('[EDIT-TREE] Gap (container-fluid.top - auth-page.top):', gap + 'px');
+    console.log('[EDIT-TREE] Gap from auth-page content area:', gapFromAuthContent + 'px');
+    
+    // Check if container-fluid is the first child
+    const isFirstChild = authPage.firstElementChild === containerFluid;
+    console.log('[EDIT-TREE] container-fluid is first element child:', isFirstChild);
+    
+    // Check for text nodes before container-fluid
+    let textNodeBefore = null;
+    let node = authPage.firstChild;
+    while (node && node !== containerFluid) {
+      if (node.nodeType === 3) { // Text node
+        const text = node.textContent.trim();
+        if (text.length > 0) {
+          textNodeBefore = text;
+          break;
+        }
+      }
+      node = node.nextSibling;
+    }
+    if (textNodeBefore) {
+      console.warn('[EDIT-TREE] WARNING: Non-empty text node found before container-fluid:', JSON.stringify(textNodeBefore));
+    } else {
+      console.log('[EDIT-TREE] No non-empty text nodes before container-fluid');
+    }
+    
+    if (gap > 0) {
+      console.error('[EDIT-TREE] ERROR: Gap detected between auth-page and container-fluid!');
+      console.error('[EDIT-TREE] Expected gap: 0px');
+      console.error('[EDIT-TREE] Actual gap:', gap + 'px');
+      console.error('[EDIT-TREE] This gap is likely causing the white space issue!');
+    } else if (gap < 0) {
+      console.warn('[EDIT-TREE] WARNING: Negative gap (overlap):', gap + 'px');
+    } else {
+      console.log('[EDIT-TREE] ✓ No gap detected - elements are aligned correctly');
+    }
+  }
+  
+  // Gap between editor-header and split-view-container
+  if (editorHeader && splitView) {
+    const headerRect = editorHeader.getBoundingClientRect();
+    const splitRect = splitView.getBoundingClientRect();
+    const gap = splitRect.top - headerRect.bottom;
+    console.log('[EDIT-TREE] Gap between editor-header.bottom and split-view-container.top:', gap + 'px');
+    if (gap > 0) {
+      console.warn('[EDIT-TREE] WARNING: Gap detected between editor-header and split-view-container!');
+    }
+  }
+  
+  // Check for any elements between auth-page and container-fluid
+  if (authPage && containerFluid) {
+    const children = Array.from(authPage.children);
+    const containerIndex = children.indexOf(containerFluid);
+    console.log('[EDIT-TREE] container-fluid child index:', containerIndex);
+    if (containerIndex > 0) {
+      console.warn('[EDIT-TREE] WARNING: Elements found before container-fluid:');
+      for (let i = 0; i < containerIndex; i++) {
+        const el = children[i];
+        const rect = el.getBoundingClientRect();
+        console.warn('[EDIT-TREE]   - Element', i + ':', el.tagName, el.className, 'height:', rect.height + 'px');
+      }
+    }
+  }
+  
+  console.log('[EDIT-TREE] ========================================');
+  console.log('[EDIT-TREE] Diagnostics complete');
+  console.log('[EDIT-TREE] ========================================');
+  
+  // Set up MutationObserver to detect any dynamic style changes
+  if (authPage && containerFluid) {
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const authRect = authPage.getBoundingClientRect();
+          const containerRect = containerFluid.getBoundingClientRect();
+          const gap = containerRect.top - authRect.top;
+          console.log('[EDIT-TREE] MutationObserver: Style changed, gap is now:', gap + 'px');
+        }
+      });
+    });
+    
+    observer.observe(authPage, {
+      attributes: true,
+      attributeFilter: ['style', 'class']
+    });
+    
+    observer.observe(containerFluid, {
+      attributes: true,
+      attributeFilter: ['style', 'class']
+    });
+    
+    console.log('[EDIT-TREE] MutationObserver set up to monitor auth-page and container-fluid');
+  }
+  
+  // Re-check layout after a short delay (in case styles load asynchronously)
+  setTimeout(function() {
+    console.log('[EDIT-TREE] ===== DELAYED CHECK (after 100ms) =====');
+    if (authPage && containerFluid) {
+      const authRect = authPage.getBoundingClientRect();
+      const containerRect = containerFluid.getBoundingClientRect();
+      const gap = containerRect.top - authRect.top;
+      console.log('[EDIT-TREE] Delayed check - Gap between auth-page and container-fluid:', gap + 'px');
+      
+      if (gap > 0) {
+        console.error('[EDIT-TREE] ERROR: Gap still present after delay:', gap + 'px');
+        console.error('[EDIT-TREE] This suggests the gap is not caused by async style loading');
+      }
+    }
+  }, 100);
+  
+  // Re-check layout after stylesheets load
+  window.addEventListener('load', function() {
+    console.log('[EDIT-TREE] ===== WINDOW LOAD EVENT (all resources loaded) =====');
+    if (authPage && containerFluid) {
+      const authRect = authPage.getBoundingClientRect();
+      const containerRect = containerFluid.getBoundingClientRect();
+      const gap = containerRect.top - authRect.top;
+      console.log('[EDIT-TREE] After window load - Gap between auth-page and container-fluid:', gap + 'px');
+      
+      if (gap > 0) {
+        console.error('[EDIT-TREE] ERROR: Gap still present after all resources loaded:', gap + 'px');
+      }
+    }
+  });
+  
+  // Expose diagnostic function to window for manual debugging
+  window.debugEditTreeLayout = function() {
+    console.log('[EDIT-TREE] ===== MANUAL DIAGNOSTIC RUN =====');
+    const authPage = document.querySelector('.auth-page');
+    const containerFluid = document.querySelector('.container-fluid');
+    
+    if (!authPage || !containerFluid) {
+      console.error('[EDIT-TREE] ERROR: Required elements not found');
+      return;
+    }
+    
+    const authRect = authPage.getBoundingClientRect();
+    const containerRect = containerFluid.getBoundingClientRect();
+    const gap = containerRect.top - authRect.top;
+    
+    const authStyles = window.getComputedStyle(authPage);
+    const containerStyles = window.getComputedStyle(containerFluid);
+    
+    console.log('[EDIT-TREE] Current gap:', gap + 'px');
+    console.log('[EDIT-TREE] auth-page padding-top:', authStyles.paddingTop);
+    console.log('[EDIT-TREE] auth-page margin-top:', authStyles.marginTop);
+    console.log('[EDIT-TREE] container-fluid margin-top:', containerStyles.marginTop);
+    console.log('[EDIT-TREE] container-fluid padding-top:', containerStyles.paddingTop);
+    console.log('[EDIT-TREE] auth-page.top:', authRect.top);
+    console.log('[EDIT-TREE] container-fluid.top:', containerRect.top);
+    
+    // Check for text nodes
+    let node = authPage.firstChild;
+    let textNodes = [];
+    while (node) {
+      if (node.nodeType === 3) {
+        const text = node.textContent;
+        if (text.trim().length > 0) {
+          textNodes.push({
+            text: JSON.stringify(text),
+            length: text.length
+          });
+        }
+      }
+      if (node === containerFluid) break;
+      node = node.nextSibling;
+    }
+    
+    if (textNodes.length > 0) {
+      console.warn('[EDIT-TREE] Text nodes found:', textNodes);
+    } else {
+      console.log('[EDIT-TREE] No text nodes found between auth-page and container-fluid');
+    }
+    
+    return {
+      gap: gap,
+      authPageTop: authRect.top,
+      containerTop: containerRect.top,
+      authPagePaddingTop: authStyles.paddingTop,
+      authPageMarginTop: authStyles.marginTop,
+      containerMarginTop: containerStyles.marginTop,
+      containerPaddingTop: containerStyles.paddingTop,
+      textNodes: textNodes
+    };
+  };
+  
+  console.log('[EDIT-TREE] Diagnostic function available: window.debugEditTreeLayout()');
+  
+  // Search functionality
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+      const searchTerm = e.target.value.toLowerCase().trim();
+      const personNames = document.querySelectorAll('.person-name');
+      const recordCards = document.querySelectorAll('.record-card');
+      
+      if (searchTerm === '') {
+        // Show all when search is empty
+        recordCards.forEach(card => {
+          card.style.display = '';
+        });
+        personNames.forEach(person => {
+          person.classList.remove('search-highlight');
+        });
+      } else {
+        // Filter and highlight
+        let hasMatch = false;
+        recordCards.forEach(card => {
+          const personsInCard = card.querySelectorAll('.person-name');
+          let cardHasMatch = false;
+          
+          personsInCard.forEach(person => {
+            const personText = person.textContent.toLowerCase();
+            if (personText.includes(searchTerm)) {
+              person.classList.add('search-highlight');
+              cardHasMatch = true;
+              hasMatch = true;
+            } else {
+              person.classList.remove('search-highlight');
+            }
+          });
+          
+          // Show/hide card based on match
+          card.style.display = cardHasMatch ? '' : 'none';
+        });
+      }
+    });
+    
+    console.log('[EDIT-TREE] Search functionality initialized');
+  }
+  
   const toggles = document.querySelectorAll('.btn-toggle');
   const sections = document.querySelectorAll('.view-section');
 
