@@ -887,6 +887,86 @@ debugLog("JavaScript script tag opened");
         btn.textContent = 'Exportujem...';
         
         try {
+            // Clone SVG to avoid modifying original
+            const svgClone = svg.cloneNode(true);
+            
+            // Get computed styles and inline them into SVG elements
+            function inlineStyles(element) {
+                const computed = window.getComputedStyle(element);
+                const styleMap = {
+                    'fill': computed.fill !== 'rgb(0, 0, 0)' ? computed.fill : null,
+                    'stroke': computed.stroke !== 'none' && computed.stroke !== 'rgb(0, 0, 0)' ? computed.stroke : null,
+                    'stroke-width': computed.strokeWidth,
+                    'font-family': computed.fontFamily,
+                    'font-size': computed.fontSize,
+                    'font-weight': computed.fontWeight,
+                    'color': computed.color !== 'rgb(0, 0, 0)' ? computed.color : null
+                };
+                
+                // Apply inline styles
+                let styleStr = '';
+                for (const [prop, value] of Object.entries(styleMap)) {
+                    if (value && value !== 'none' && value !== '0px') {
+                        styleStr += `${prop}:${value};`;
+                    }
+                }
+                
+                // Also check class-based styles
+                if (element.classList.contains('person-rect')) {
+                    if (element.classList.contains('male')) {
+                        styleStr += 'fill:#e6f7ff;stroke:#91d5ff;';
+                    } else if (element.classList.contains('female')) {
+                        styleStr += 'fill:#fff0f6;stroke:#ffadd2;';
+                    }
+                } else if (element.classList.contains('id-badge')) {
+                    styleStr += 'fill:#10b981;';
+                } else if (element.classList.contains('id-text')) {
+                    styleStr += 'fill:white;font-size:11px;font-family:monospace;font-weight:bold;';
+                } else if (element.classList.contains('person-text')) {
+                    styleStr += 'fill:#333;font-size:14px;font-family:Segoe UI, sans-serif;';
+                } else if (element.classList.contains('grid-text')) {
+                    styleStr += 'fill:#aaa;font-size:14px;';
+                } else if (element.classList.contains('spouse-line')) {
+                    styleStr += 'stroke:#f5222d;stroke-dasharray:4;';
+                } else if (element.classList.contains('child-line')) {
+                    styleStr += 'stroke:#1890ff;';
+                } else if (element.classList.contains('connection-line')) {
+                    styleStr += 'stroke:#1890ff;stroke-opacity:0.4;';
+                } else if (element.classList.contains('grid-line')) {
+                    styleStr += 'stroke:#eee;';
+                }
+                
+                if (styleStr) {
+                    element.setAttribute('style', styleStr);
+                }
+                
+                // Recursively process children
+                Array.from(element.children).forEach(child => {
+                    if (child.nodeType === 1) { // Element node
+                        inlineStyles(child);
+                    }
+                });
+            }
+            
+            // Inline all styles
+            inlineStyles(svgClone);
+            
+            // Add style tag with all CSS rules to SVG
+            const styleTag = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+            styleTag.textContent = `
+                .person-rect.male { fill: #e6f7ff; stroke: #91d5ff; stroke-width: 1; }
+                .person-rect.female { fill: #fff0f6; stroke: #ffadd2; stroke-width: 1; }
+                .id-badge { fill: #10b981; }
+                .id-text { fill: white; font-size: 11px; font-family: monospace; font-weight: bold; }
+                .person-text { fill: #333; font-size: 14px; font-family: 'Segoe UI', sans-serif; }
+                .grid-text { fill: #aaa; font-size: 14px; font-family: sans-serif; }
+                .spouse-line { stroke: #f5222d; stroke-dasharray: 4; fill: none; stroke-width: 1.5; }
+                .child-line { stroke: #1890ff; fill: none; stroke-width: 1.5; }
+                .connection-line { stroke: #1890ff; fill: none; stroke-width: 1.5; stroke-opacity: 0.4; }
+                .grid-line { stroke: #eee; stroke-width: 1; }
+            `;
+            svgClone.insertBefore(styleTag, svgClone.firstChild);
+            
             // Get SVG dimensions
             const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
             const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
@@ -902,8 +982,8 @@ debugLog("JavaScript script tag opened");
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Convert SVG to image
-            const svgData = new XMLSerializer().serializeToString(svg);
+            // Convert SVG to image with inline styles
+            const svgData = new XMLSerializer().serializeToString(svgClone);
             const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
             

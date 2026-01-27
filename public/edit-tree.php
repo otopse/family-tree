@@ -559,6 +559,84 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('[EDIT-TREE] SVG found, starting export');
         
+        // Clone SVG to avoid modifying original
+        const svgClone = svg.cloneNode(true);
+        
+        // Function to inline styles into SVG elements
+        function inlineStyles(element) {
+          // Apply class-based styles inline
+          if (element.classList) {
+            if (element.classList.contains('person-rect')) {
+              if (element.classList.contains('male')) {
+                element.setAttribute('fill', '#e6f7ff');
+                element.setAttribute('stroke', '#91d5ff');
+                element.setAttribute('stroke-width', '1');
+              } else if (element.classList.contains('female')) {
+                element.setAttribute('fill', '#fff0f6');
+                element.setAttribute('stroke', '#ffadd2');
+                element.setAttribute('stroke-width', '1');
+              }
+            } else if (element.classList.contains('id-badge')) {
+              element.setAttribute('fill', '#10b981');
+            } else if (element.classList.contains('id-text')) {
+              element.setAttribute('fill', 'white');
+              element.setAttribute('font-size', '11px');
+              element.setAttribute('font-family', 'monospace');
+              element.setAttribute('font-weight', 'bold');
+            } else if (element.classList.contains('person-text')) {
+              element.setAttribute('fill', '#333');
+              element.setAttribute('font-size', '14px');
+              element.setAttribute('font-family', 'Segoe UI, sans-serif');
+            } else if (element.classList.contains('grid-text')) {
+              element.setAttribute('fill', '#aaa');
+              element.setAttribute('font-size', '14px');
+            } else if (element.classList.contains('spouse-line')) {
+              element.setAttribute('stroke', '#f5222d');
+              element.setAttribute('stroke-dasharray', '4');
+              element.setAttribute('fill', 'none');
+              element.setAttribute('stroke-width', '1.5');
+            } else if (element.classList.contains('child-line')) {
+              element.setAttribute('stroke', '#1890ff');
+              element.setAttribute('fill', 'none');
+              element.setAttribute('stroke-width', '1.5');
+            } else if (element.classList.contains('connection-line')) {
+              element.setAttribute('stroke', '#1890ff');
+              element.setAttribute('fill', 'none');
+              element.setAttribute('stroke-width', '1.5');
+              element.setAttribute('stroke-opacity', '0.4');
+            } else if (element.classList.contains('grid-line')) {
+              element.setAttribute('stroke', '#eee');
+              element.setAttribute('stroke-width', '1');
+            }
+          }
+          
+          // Recursively process children
+          Array.from(element.children).forEach(child => {
+            if (child.nodeType === 1) { // Element node
+              inlineStyles(child);
+            }
+          });
+        }
+        
+        // Inline all styles
+        inlineStyles(svgClone);
+        
+        // Add style tag with all CSS rules to SVG
+        const styleTag = iframeDoc.createElementNS('http://www.w3.org/2000/svg', 'style');
+        styleTag.textContent = `
+          .person-rect.male { fill: #e6f7ff; stroke: #91d5ff; stroke-width: 1; }
+          .person-rect.female { fill: #fff0f6; stroke: #ffadd2; stroke-width: 1; }
+          .id-badge { fill: #10b981; }
+          .id-text { fill: white; font-size: 11px; font-family: monospace; font-weight: bold; }
+          .person-text { fill: #333; font-size: 14px; font-family: 'Segoe UI', sans-serif; }
+          .grid-text { fill: #aaa; font-size: 14px; font-family: sans-serif; }
+          .spouse-line { stroke: #f5222d; stroke-dasharray: 4; fill: none; stroke-width: 1.5; }
+          .child-line { stroke: #1890ff; fill: none; stroke-width: 1.5; }
+          .connection-line { stroke: #1890ff; fill: none; stroke-width: 1.5; stroke-opacity: 0.4; }
+          .grid-line { stroke: #eee; stroke-width: 1; }
+        `;
+        svgClone.insertBefore(styleTag, svgClone.firstChild);
+        
         // Get SVG dimensions
         const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
         const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
@@ -574,8 +652,8 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Convert SVG to image
-        const svgData = new XMLSerializer().serializeToString(svg);
+        // Convert SVG to image with inline styles
+        const svgData = new XMLSerializer().serializeToString(svgClone);
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
         
