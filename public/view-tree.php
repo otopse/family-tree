@@ -339,18 +339,81 @@ if ($isEmbed) {
         console.log(msg);
     }
 
+    // Function to log to server debug file
+    function debugLog(msg, context = '') {
+        log(msg);
+        try {
+            fetch('/api/debug-log.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg, context: context })
+            }).catch(err => {
+                console.error('Failed to log to server:', err);
+            });
+        } catch (e) {
+            console.error('Error in debugLog:', e);
+        }
+    }
+
     // ... (rest of the script logic)
     // We need to output the PHP data into JS variables
-    const individuals = <?= json_encode(array_values($individuals)) ?>;
-    const families = <?= json_encode($cleanFamilies) ?>;
+    debugLog("=== JS INIT START ===");
+    debugLog("Browser: " + navigator.userAgent);
+    debugLog("URL: " + window.location.href);
+    
+    let individuals, families;
+    try {
+        const individualsRaw = <?= json_encode(array_values($individuals)) ?>;
+        const familiesRaw = <?= json_encode($cleanFamilies) ?>;
+        
+        debugLog(`Raw PHP data received - individuals type: ${typeof individualsRaw}, families type: ${typeof familiesRaw}`);
+        
+        individuals = individualsRaw;
+        families = familiesRaw;
+        
+        debugLog(`PHP data loaded: individuals=${Array.isArray(individuals) ? individuals.length : 'INVALID'}, families=${Array.isArray(families) ? families.length : 'INVALID'}`);
+        
+        if (!Array.isArray(individuals)) {
+            debugLog("ERROR: individuals is not an array! Type: " + typeof individuals, JSON.stringify(individuals));
+            individuals = [];
+        } else if (individuals.length > 0) {
+            debugLog(`First individual sample: ${JSON.stringify(individuals[0])}`);
+        }
+        
+        if (!Array.isArray(families)) {
+            debugLog("ERROR: families is not an array! Type: " + typeof families, JSON.stringify(families));
+            families = [];
+        } else if (families.length > 0) {
+            debugLog(`First family sample: ${JSON.stringify(families[0])}`);
+        }
+        
+        if (individuals.length === 0) {
+            debugLog("WARNING: individuals array is empty!");
+        }
+        if (families.length === 0) {
+            debugLog("WARNING: families array is empty!");
+        }
+    } catch (e) {
+        debugLog("CRITICAL: Failed to parse PHP JSON data: " + e.message, e.stack);
+        individuals = [];
+        families = [];
+    }
 
     // ... (rest of JS functions: initTree, etc) ...
     // Copying the full JS logic here
     
     window.onerror = function(msg, url, line, col, error) {
-        log(`ERROR: ${msg} at ${line}:${col}`);
+        const errorMsg = `ERROR: ${msg} at ${line}:${col}${error ? ' | ' + error.stack : ''}`;
+        log(errorMsg);
+        debugLog(errorMsg, `URL: ${url}`);
         return false;
     };
+    
+    window.addEventListener('unhandledrejection', function(event) {
+        const errorMsg = `UNHANDLED PROMISE REJECTION: ${event.reason}`;
+        log(errorMsg);
+        debugLog(errorMsg, event.reason?.stack || '');
+    });
 
     const CONFIG = {
         pixelsPerYear: 5,
@@ -366,98 +429,179 @@ if ($isEmbed) {
 
     document.addEventListener('DOMContentLoaded', () => {
         try {
-            log("DOM Loaded. Starting initTree...");
+            debugLog("DOM Loaded. Starting initTree...");
             initTree();
+            debugLog("initTree() completed successfully");
         } catch (e) {
-            log("CRITICAL ERROR in initTree: " + e.message);
+            const errorMsg = "CRITICAL ERROR in initTree: " + e.message;
+            log(errorMsg);
+            debugLog(errorMsg, e.stack);
             console.error(e);
         }
     });
 
     function initTree() {
-        log(`Data loaded: ${individuals.length} individuals, ${families.length} families`);
+        debugLog(`initTree() called. Data: ${individuals.length} individuals, ${families.length} families`);
         
         const wrapper = document.getElementById('tree-wrapper');
         const loading = document.getElementById('loading');
         
+        if (!wrapper) {
+            debugLog("ERROR: tree-wrapper element not found!");
+            return;
+        }
+        debugLog("tree-wrapper found");
+        
+        if (!loading) {
+            debugLog("WARNING: loading element not found");
+        }
+        
+        if (individuals.length === 0) {
+            debugLog("WARNING: No individuals to display!");
+            if (loading) loading.textContent = "Žiadne dáta na zobrazenie";
+            return;
+        }
+        
         // 1. Prepare Data & Layout
+        debugLog("Step 1: Building indMap...");
         const indMap = {};
-        individuals.forEach(i => indMap[i.id] = i);
+        individuals.forEach(i => {
+            if (!i.id) {
+                debugLog(`WARNING: Individual without id: ${JSON.stringify(i)}`);
+            }
+            indMap[i.id] = i;
+        });
+        debugLog(`indMap built with ${Object.keys(indMap).length} entries`);
 
         // Determine X range
-        let minDataYear = Math.min(...individuals.map(i => i.birthYear));
-        let maxDataYear = Math.max(...individuals.map(i => i.deathYear));
+        debugLog("Step 2: Calculating year range...");
+        const birthYears = individuals.map(i => i.birthYear).filter(y => y != null && !isNaN(y));
+        const deathYears = individuals.map(i => i.deathYear).filter(y => y != null && !isNaN(y));
+        
+        if (birthYears.length === 0) {
+            debugLog("ERROR: No valid birth years found!");
+            if (loading) loading.textContent = "Chyba: Žiadne platné dátumy narodenia";
+            return;
+        }
+        
+        let minDataYear = Math.min(...birthYears);
+        let maxDataYear = deathYears.length > 0 ? Math.max(...deathYears) : minDataYear;
+        
+        debugLog(`Year range: min=${minDataYear}, max=${maxDataYear}`);
         
         CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
         CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50;
+        debugLog(`CONFIG year range: min=${CONFIG.minYear}, max=${CONFIG.maxYear}`);
 
         // Calculate Widths - use same format as edit-tree.php
+        debugLog("Step 3: Calculating widths...");
         const badgeWidth = 22;
         const badgeMargin = 4;
         
+        let widthErrors = 0;
         individuals.forEach(ind => {
-            // Use pre-formatted dateStr from PHP
-            const displayText = `${ind.name} ${ind.dateStr || ''}`.trim();
-            ind.displayText = displayText;
-            
-            // Use sequential number as displayId
-            ind.displayId = ind.seqNum;
-            
-            // Width = badge + margin + text + padding
-            ind.width = badgeWidth + badgeMargin + (displayText.length * CONFIG.charWidth) + CONFIG.basePadding;
+            try {
+                // Use pre-formatted dateStr from PHP
+                const displayText = `${ind.name || 'Neznámy'} ${ind.dateStr || ''}`.trim();
+                ind.displayText = displayText;
+                
+                // Use sequential number as displayId
+                ind.displayId = ind.seqNum || 0;
+                
+                // Width = badge + margin + text + padding
+                ind.width = badgeWidth + badgeMargin + (displayText.length * CONFIG.charWidth) + CONFIG.basePadding;
+            } catch (e) {
+                widthErrors++;
+                debugLog(`Error calculating width for individual: ${JSON.stringify(ind)}`, e.message);
+            }
         });
+        if (widthErrors > 0) {
+            debugLog(`WARNING: ${widthErrors} errors calculating widths`);
+        }
 
         // 2. Vertical Layout (Ordering) - use seqNum from PHP (same as edit-tree.php tiles)
-        const orderedIndividuals = [...individuals].sort((a, b) => a.seqNum - b.seqNum);
+        debugLog("Step 4: Sorting individuals...");
+        const orderedIndividuals = [...individuals].sort((a, b) => {
+            const seqA = a.seqNum || 999999;
+            const seqB = b.seqNum || 999999;
+            return seqA - seqB;
+        });
+        debugLog(`Sorted ${orderedIndividuals.length} individuals`);
 
         orderedIndividuals.forEach((ind, idx) => {
             ind.rowIndex = idx;
         });
 
+        debugLog("Step 5: Calculating dimensions...");
         const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
         const totalHeight = (orderedIndividuals.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
+        debugLog(`SVG dimensions: ${totalWidth}x${totalHeight}`);
 
         // 3. Render SVG
+        debugLog("Step 6: Creating SVG element...");
         const ns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(ns, "svg");
         svg.setAttribute("width", totalWidth);
         svg.setAttribute("height", totalHeight);
         svg.id = "tree-svg";
+        debugLog("SVG element created");
 
         // Grid
+        debugLog("Step 7: Creating grid...");
         const gridGroup = document.createElementNS(ns, "g");
-        for (let y = CONFIG.minYear; y <= CONFIG.maxYear; y += 10) {
-            const x = getX(y);
-            const line = document.createElementNS(ns, "line");
-            line.setAttribute("x1", x);
-            line.setAttribute("y1", 0);
-            line.setAttribute("x2", x);
-            line.setAttribute("y2", totalHeight);
-            line.setAttribute("class", "grid-line");
-            if (y % 50 === 0) line.style.strokeWidth = "1.5";
-            gridGroup.appendChild(line);
+        let gridLines = 0;
+        try {
+            for (let y = CONFIG.minYear; y <= CONFIG.maxYear; y += 10) {
+                const x = getX(y);
+                const line = document.createElementNS(ns, "line");
+                line.setAttribute("x1", x);
+                line.setAttribute("y1", 0);
+                line.setAttribute("x2", x);
+                line.setAttribute("y2", totalHeight);
+                line.setAttribute("class", "grid-line");
+                if (y % 50 === 0) line.style.strokeWidth = "1.5";
+                gridGroup.appendChild(line);
+                gridLines++;
 
-            if (y % 50 === 0) {
-                const text = document.createElementNS(ns, "text");
-                text.setAttribute("x", x + 5);
-                text.setAttribute("y", 20);
-                text.setAttribute("class", "grid-text");
-                text.textContent = y;
-                gridGroup.appendChild(text);
+                if (y % 50 === 0) {
+                    const text = document.createElementNS(ns, "text");
+                    text.setAttribute("x", x + 5);
+                    text.setAttribute("y", 20);
+                    text.setAttribute("class", "grid-text");
+                    text.textContent = y;
+                    gridGroup.appendChild(text);
+                }
             }
+            svg.appendChild(gridGroup);
+            debugLog(`Grid created with ${gridLines} lines`);
+        } catch (e) {
+            debugLog("ERROR creating grid: " + e.message, e.stack);
         }
-        svg.appendChild(gridGroup);
 
         // Connections
+        debugLog("Step 8: Creating connections...");
         const connectionsGroup = document.createElementNS(ns, "g");
         
         // Spouses
+        debugLog("Creating spouse connections...");
         const processedSpouses = new Set();
+        let spouseConnections = 0;
+        let spouseErrors = 0;
         families.forEach(fam => {
-            if (fam.husb && fam.wife) {
-                const h = indMap[fam.husb];
-                const w = indMap[fam.wife];
-                if (h && w) {
+            try {
+                if (fam.husb && fam.wife) {
+                    const h = indMap[fam.husb];
+                    const w = indMap[fam.wife];
+                    if (!h) {
+                        debugLog(`WARNING: Husband ${fam.husb} not found in indMap`);
+                        spouseErrors++;
+                        return;
+                    }
+                    if (!w) {
+                        debugLog(`WARNING: Wife ${fam.wife} not found in indMap`);
+                        spouseErrors++;
+                        return;
+                    }
                     const pairKey = [h.id, w.id].sort().join('-');
                     if (processedSpouses.has(pairKey)) return;
                     processedSpouses.add(pairKey);
@@ -476,92 +620,151 @@ if ($isEmbed) {
                     path.setAttribute("d", d);
                     path.setAttribute("class", "connection-line spouse-line");
                     connectionsGroup.appendChild(path);
+                    spouseConnections++;
                 }
+            } catch (e) {
+                spouseErrors++;
+                debugLog(`ERROR creating spouse connection: ${e.message}`, e.stack);
             }
         });
+        debugLog(`Created ${spouseConnections} spouse connections (${spouseErrors} errors)`);
 
         // Children
+        debugLog("Creating child connections...");
+        let childConnections = 0;
+        let childErrors = 0;
         families.forEach(fam => {
-            if (!fam.children || fam.children.length === 0) return;
-            const parentId = fam.wife ? fam.wife : fam.husb;
-            const parent = indMap[parentId];
-            if (!parent) return;
+            try {
+                if (!fam.children || fam.children.length === 0) return;
+                const parentId = fam.wife ? fam.wife : fam.husb;
+                if (!parentId) {
+                    debugLog(`WARNING: Family has children but no parent: ${JSON.stringify(fam)}`);
+                    childErrors++;
+                    return;
+                }
+                const parent = indMap[parentId];
+                if (!parent) {
+                    debugLog(`WARNING: Parent ${parentId} not found in indMap`);
+                    childErrors++;
+                    return;
+                }
 
-            const startX = getX(parent.birthYear) + 20;
-            const startY = getY(parent) + CONFIG.boxHeight;
+                const startX = getX(parent.birthYear) + 20;
+                const startY = getY(parent) + CONFIG.boxHeight;
 
-            fam.children.forEach(childId => {
-                const child = indMap[childId];
-                if (!child) return;
+                fam.children.forEach(childId => {
+                    const child = indMap[childId];
+                    if (!child) {
+                        debugLog(`WARNING: Child ${childId} not found in indMap`);
+                        childErrors++;
+                        return;
+                    }
 
-                const endX = getX(child.birthYear);
-                const endY = getY(child) + (CONFIG.boxHeight / 2);
+                    const endX = getX(child.birthYear);
+                    const endY = getY(child) + (CONFIG.boxHeight / 2);
 
-                const path = document.createElementNS(ns, "path");
-                const d = `M ${startX} ${startY} C ${startX} ${startY + 20}, ${endX - 20} ${endY}, ${endX} ${endY}`;
-                path.setAttribute("d", d);
-                path.setAttribute("class", "connection-line child-line");
-                connectionsGroup.appendChild(path);
-            });
+                    const path = document.createElementNS(ns, "path");
+                    const d = `M ${startX} ${startY} C ${startX} ${startY + 20}, ${endX - 20} ${endY}, ${endX} ${endY}`;
+                    path.setAttribute("d", d);
+                    path.setAttribute("class", "connection-line child-line");
+                    connectionsGroup.appendChild(path);
+                    childConnections++;
+                });
+            } catch (e) {
+                childErrors++;
+                debugLog(`ERROR creating child connection: ${e.message}`, e.stack);
+            }
         });
+        debugLog(`Created ${childConnections} child connections (${childErrors} errors)`);
         svg.appendChild(connectionsGroup);
 
         // Boxes
+        debugLog("Step 9: Creating person boxes...");
         const boxesGroup = document.createElementNS(ns, "g");
         const badgeWidth = 22;
         const badgeHeight = 16;
         const badgeMargin = 4;
         
-        orderedIndividuals.forEach(ind => {
-            const g = document.createElementNS(ns, "g");
-            g.setAttribute("class", "person-box");
-            g.setAttribute("transform", `translate(${getX(ind.birthYear)}, ${getY(ind)})`);
-            
-            const rect = document.createElementNS(ns, "rect");
-            rect.setAttribute("width", ind.width);
-            rect.setAttribute("height", CONFIG.boxHeight);
-            rect.setAttribute("rx", 4);
-            rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
-            g.appendChild(rect);
+        let boxErrors = 0;
+        orderedIndividuals.forEach((ind, idx) => {
+            try {
+                const g = document.createElementNS(ns, "g");
+                g.setAttribute("class", "person-box");
+                
+                const x = getX(ind.birthYear);
+                const y = getY(ind);
+                g.setAttribute("transform", `translate(${x}, ${y})`);
+                
+                const rect = document.createElementNS(ns, "rect");
+                rect.setAttribute("width", ind.width || 100);
+                rect.setAttribute("height", CONFIG.boxHeight);
+                rect.setAttribute("rx", 4);
+                rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
+                g.appendChild(rect);
 
-            // Badge on the left (like in tiles)
-            const badge = document.createElementNS(ns, "rect");
-            badge.setAttribute("x", 3);
-            badge.setAttribute("y", (CONFIG.boxHeight - badgeHeight) / 2);
-            badge.setAttribute("width", badgeWidth);
-            badge.setAttribute("height", badgeHeight);
-            badge.setAttribute("rx", 3);
-            badge.setAttribute("class", "id-badge");
-            g.appendChild(badge);
+                // Badge on the left (like in tiles)
+                const badge = document.createElementNS(ns, "rect");
+                badge.setAttribute("x", 3);
+                badge.setAttribute("y", (CONFIG.boxHeight - badgeHeight) / 2);
+                badge.setAttribute("width", badgeWidth);
+                badge.setAttribute("height", badgeHeight);
+                badge.setAttribute("rx", 3);
+                badge.setAttribute("class", "id-badge");
+                g.appendChild(badge);
 
-            const idText = document.createElementNS(ns, "text");
-            idText.setAttribute("x", 3 + badgeWidth / 2);
-            idText.setAttribute("y", CONFIG.boxHeight / 2);
-            idText.setAttribute("class", "id-text");
-            idText.textContent = ind.displayId;
-            g.appendChild(idText);
+                const idText = document.createElementNS(ns, "text");
+                idText.setAttribute("x", 3 + badgeWidth / 2);
+                idText.setAttribute("y", CONFIG.boxHeight / 2);
+                idText.setAttribute("class", "id-text");
+                idText.textContent = ind.displayId || idx + 1;
+                g.appendChild(idText);
 
-            // Name text after badge
-            const text = document.createElementNS(ns, "text");
-            text.setAttribute("x", badgeWidth + badgeMargin + 6);
-            text.setAttribute("y", CONFIG.boxHeight / 2);
-            text.setAttribute("class", "person-text");
-            text.setAttribute("dominant-baseline", "central");
-            text.textContent = ind.displayText;
-            g.appendChild(text);
+                // Name text after badge
+                const text = document.createElementNS(ns, "text");
+                text.setAttribute("x", badgeWidth + badgeMargin + 6);
+                text.setAttribute("y", CONFIG.boxHeight / 2);
+                text.setAttribute("class", "person-text");
+                text.setAttribute("dominant-baseline", "central");
+                text.textContent = ind.displayText || ind.name || 'Neznámy';
+                g.appendChild(text);
 
-            boxesGroup.appendChild(g);
+                boxesGroup.appendChild(g);
+            } catch (e) {
+                boxErrors++;
+                debugLog(`ERROR creating box for individual ${ind.id || idx}: ${e.message}`, e.stack);
+            }
         });
         svg.appendChild(boxesGroup);
+        debugLog(`Created ${orderedIndividuals.length} person boxes (${boxErrors} errors)`);
 
-        if (loading) loading.remove();
-        wrapper.appendChild(svg);
+        debugLog("Step 10: Appending SVG to DOM...");
+        try {
+            if (loading) {
+                loading.remove();
+                debugLog("Loading element removed");
+            }
+            wrapper.appendChild(svg);
+            debugLog("SVG appended successfully. Graph rendering complete!");
+        } catch (e) {
+            debugLog("CRITICAL ERROR appending SVG: " + e.message, e.stack);
+            if (loading) {
+                loading.textContent = "Chyba pri vykresľovaní grafu: " + e.message;
+            }
+        }
     }
 
     function getX(year) {
+        if (year == null || isNaN(year)) {
+            debugLog(`WARNING: getX called with invalid year: ${year}`);
+            return CONFIG.paddingX;
+        }
         return (year - CONFIG.minYear) * CONFIG.pixelsPerYear + CONFIG.paddingX;
     }
     function getY(ind) {
+        if (!ind || ind.rowIndex == null) {
+            debugLog(`WARNING: getY called with invalid individual: ${JSON.stringify(ind)}`);
+            return CONFIG.paddingY;
+        }
         return ind.rowIndex * CONFIG.rowHeight + CONFIG.paddingY;
     }
 </script>
