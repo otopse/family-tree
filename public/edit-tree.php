@@ -235,7 +235,7 @@ function render_person_html(?array $el, int $seqNum): string {
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
 ?>
 
-<div class="container-fluid" style="padding: 20px;">
+<div class="container-fluid">
   <div class="editor-header">
     <div style="display: flex; align-items: center; gap: 16px;">
       <a href="/family-trees.php" class="btn-secondary" style="padding: 6px 12px;">← Späť</a>
@@ -314,13 +314,36 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   html, body {
     height: 100%;
     overflow: hidden; /* Prevent body scroll */
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Override auth-page padding for edit-tree */
+  .auth-page {
+    padding: 0 !important;
+    margin: 0 !important;
+    margin-top: 72px !important; /* Push down by navbar height (72px) */
+    height: calc(100vh - 72px) !important; /* Subtract navbar height */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  
+  /* Hide footer on edit-tree page */
+  .footer {
+    display: none !important;
   }
 
   .container-fluid {
-    height: 100vh;
+    flex: 1;
     display: flex;
     flex-direction: column;
     padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0; /* Important for flex children */
+    overflow: hidden;
+    height: 100%;
   }
   
   .editor-header {
@@ -338,6 +361,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     flex: 1;
     overflow: hidden;
     min-height: 0; /* Important for flex children to scroll */
+    height: 100%;
   }
 
   .split-pane {
@@ -353,6 +377,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     overflow-y: auto;
     overflow-x: hidden;
     height: 100%;
+    box-sizing: border-box;
   }
 
   /* Custom scrollbar styling */
@@ -377,6 +402,15 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   .right-pane {
     flex: 1;
     background: white;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  .right-pane iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
   }
 
   /* Single Column Grid for Left Pane */
