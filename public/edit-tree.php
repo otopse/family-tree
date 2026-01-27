@@ -242,15 +242,11 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
       <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px; margin-left: auto;">Export PDF</button>
     </div>
-  </div>
-  
-  <?php
+  </div><?php
   debugLog("Editor header rendered. Export PDF button should be present.");
   debugLog("Records processed: " . count($viewData));
   debugLog("=== EDIT-TREE PHP DONE ===");
-  ?>
-    
-  <div class="split-view-container">
+  ?><div class="split-view-container">
     <!-- Left: Record View (Masonry) -->
     <div id="record-view" class="split-pane left-pane">
       <div class="toolbar">
@@ -318,12 +314,20 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     padding: 0;
   }
   
-  /* Override auth-page padding for edit-tree */
-  .auth-page {
+  /* Override auth-page padding for edit-tree - must override global .auth-page padding: 80px 0 */
+  body .auth-page {
     padding: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
     margin: 0 !important;
     margin-top: 72px !important; /* Push down by navbar height (72px) */
+    margin-bottom: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     height: calc(100vh - 72px) !important; /* Subtract navbar height */
+    min-height: calc(100vh - 72px) !important;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -351,10 +355,16 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   .editor-header {
     flex: 0 0 auto;
     padding: 10px 20px;
-    margin: 0;
+    margin: 0 !important;
     margin-top: 0 !important;
+    margin-bottom: 0 !important;
     border-bottom: 1px solid var(--border-color);
     background: white;
+  }
+  
+  .split-view-container {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 
   .view-toggles { display: none; } /* Hide toggles as we show both */
@@ -365,6 +375,10 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     overflow: hidden;
     min-height: 0; /* Important for flex children to scroll */
     height: 100%;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .split-pane {
