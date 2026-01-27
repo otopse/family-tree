@@ -96,189 +96,203 @@ try {
     // ---------------------------------------------------------
     // 3. Global Date Lookup (Iterative)
     // ---------------------------------------------------------
-    // We need to fill in missing dates by looking up the same person in other records
-    // (e.g. a child in one family is a parent in another).
-    
-    // Build a global map of Person ID -> Year
+    // We need to fill in missing dates by looking up the same person in other records.
+    // We run 3 iterations to ensure propagation (Local -> Global -> Local).
+
+    // A. Initial Population of Global Years (Raw Data only)
     $globalYears = [];
-    
-    // Helper to scan all records and collect known years
-    $collectGlobalYears = function() use (&$globalYears, $elementsByRecord, $getYear) {
-      $foundNew = false;
-      foreach ($elementsByRecord as $recId => $els) {
-        foreach ($els as $e) {
-          $gedId = $e['gedcom_id'] ?? null;
-          if (!$gedId) continue;
-          
-          $y = $getYear($e['birth_date'] ?? '');
-          if ($y !== null) {
-            if (!isset($globalYears[$gedId])) {
-              $globalYears[$gedId] = $y;
-              $foundNew = true;
+    foreach ($allElements as $e) {
+        $gedId = $e['gedcom_id'] ?? null;
+        if (!$gedId) continue;
+        $y = $getYear($e['birth_date'] ?? '');
+        if ($y !== null) {
+             $globalYears[$gedId] = $y;
+        }
+    }
+
+    // B. Iterative Calculation
+    $TOTAL_ITERATIONS = 3;
+
+    for ($iter = 1; $iter <= $TOTAL_ITERATIONS; $iter++) {
+        $isLastIter = ($iter === $TOTAL_ITERATIONS);
+        
+        // Only log details on the last iteration to keep log size manageable
+        // Or log minimal info on previous iterations if needed.
+        // User asked for "debug info from import + calc", so let's log headers.
+        file_put_contents($debugLog, "\n--- ITERATION $iter ---\n", FILE_APPEND);
+
+        foreach ($rawRecords as $record) {
+            $els = $elementsByRecord[$record['id']] ?? [];
+            
+            $man = null;
+            $woman = null;
+            $children = [];
+
+            foreach ($els as $e) {
+                if ($e['type'] === 'MUZ') $man = $e;
+                elseif ($e['type'] === 'ZENA') $woman = $e;
+                elseif ($e['type'] === 'DIETA') $children[] = $e;
             }
-          }
+
+            $logMsg = "";
+            if ($isLastIter) {
+                $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
+            }
+
+            // 1. Extract Real Years (Local)
+            $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
+            $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
+            
+            // 2. Global Lookup (Man/Woman)
+            // Always check global map if local is missing
+            if ($manYear === null && $man && isset($man['gedcom_id'])) {
+                if (isset($globalYears[$man['gedcom_id']])) {
+                    $manYear = $globalYears[$man['gedcom_id']];
+                    if ($isLastIter) $logMsg .= "  [Global] Man found in other record: $manYear\n";
+                }
+            }
+            if ($womanYear === null && $woman && isset($woman['gedcom_id'])) {
+                if (isset($globalYears[$woman['gedcom_id']])) {
+                    $womanYear = $globalYears[$woman['gedcom_id']];
+                    if ($isLastIter) $logMsg .= "  [Global] Woman found in other record: $womanYear\n";
+                }
+            }
+
+            if ($isLastIter) {
+                $logMsg .= "  [Raw] Man: " . ($man ? ($man['birth_date']??'empty') : 'N/A') . " -> Year: " . ($manYear ?? 'null') . "\n";
+                $logMsg .= "  [Raw] Woman: " . ($woman ? ($woman['birth_date']??'empty') : 'N/A') . " -> Year: " . ($womanYear ?? 'null') . "\n";
+            }
+
+            $manFictional = false;
+            $womanFictional = false;
+
+            // -------------------------------------------------------
+            // IMPUTATION LOGIC
+            // -------------------------------------------------------
+
+            // A) Bottom-Up: Infer Parents from Children
+            $oldestChildYear = null;
+            foreach ($children as $child) {
+                $cy = $getYear($child['birth_date'] ?? '');
+                
+                // Global lookup for child
+                if ($cy === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
+                    $cy = $globalYears[$child['gedcom_id']];
+                    if ($isLastIter) $logMsg .= "  [Global] Child ({$child['full_name']}) found: $cy\n";
+                }
+
+                if ($isLastIter) {
+                    $logMsg .= "  [Raw] Child ({$child['full_name']}): " . ($child['birth_date']??'empty') . " -> Year: " . ($cy ?? 'null') . "\n";
+                }
+                
+                if ($cy !== null) {
+                    // Update Global for Child immediately
+                    if (isset($child['gedcom_id'])) $globalYears[$child['gedcom_id']] = $cy;
+
+                    if ($oldestChildYear === null || $cy < $oldestChildYear) {
+                        $oldestChildYear = $cy;
+                    }
+                }
+            }
+
+            // If woman is missing year but we have a child
+            if ($womanYear === null && $oldestChildYear !== null && $woman) {
+                $womanYear = $oldestChildYear - 20;
+                $womanFictional = true;
+                if ($isLastIter) $logMsg .= "  [Logic] Woman imputed from oldest child ($oldestChildYear - 20 = $womanYear)\n";
+            }
+
+            // If man is missing year but we have a child (and wasn't imputed from woman yet)
+            if ($manYear === null && $oldestChildYear !== null && $man) {
+                $manYear = $oldestChildYear - 30;
+                $manFictional = true;
+                if ($isLastIter) $logMsg .= "  [Logic] Man imputed from oldest child ($oldestChildYear - 30 = $manYear)\n";
+            }
+
+            // B) Horizontal: Infer Spouse from Spouse
+            if ($manYear !== null && $womanYear === null && $woman) {
+                $womanYear = $manYear + 10;
+                $womanFictional = true;
+                if ($isLastIter) $logMsg .= "  [Logic] Woman imputed from Man ($manYear + 10 = $womanYear)\n";
+            }
+            elseif ($womanYear !== null && $manYear === null && $man) {
+                $manYear = $womanYear - 10;
+                $manFictional = true;
+                if ($isLastIter) $logMsg .= "  [Logic] Man imputed from Woman ($womanYear - 10 = $manYear)\n";
+            }
+
+            // Update Global for Parents immediately (so next records in this iter can use it)
+            if ($manYear !== null && isset($man['gedcom_id'])) $globalYears[$man['gedcom_id']] = $manYear;
+            if ($womanYear !== null && isset($woman['gedcom_id'])) $globalYears[$woman['gedcom_id']] = $womanYear;
+
+            // C) Top-Down: Infer Children from Mother (or Siblings)
+            // Only need to run full child logic on last iteration for display, 
+            // BUT we should run it in earlier iterations too if we want to propagate sibling dates?
+            // Yes, let's run it.
+            
+            $processedChildren = [];
+            $prevChildYear = null;
+
+            foreach ($children as $index => $child) {
+                $childYear = $getYear($child['birth_date'] ?? '');
+                
+                // Global lookup again
+                if ($childYear === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
+                    $childYear = $globalYears[$child['gedcom_id']];
+                }
+
+                $childFictional = false;
+
+                if ($childYear === null) {
+                    if ($index === 0 && $womanYear !== null) {
+                        $childYear = $womanYear + 20;
+                        $childFictional = true;
+                        if ($isLastIter) $logMsg .= "  [Logic] Child #$index imputed from Woman ($womanYear + 20 = $childYear)\n";
+                    }
+                    elseif ($index > 0 && $prevChildYear !== null) {
+                        $childYear = $prevChildYear + 3;
+                        $childFictional = true;
+                        if ($isLastIter) $logMsg .= "  [Logic] Child #$index imputed from sibling ($prevChildYear + 3 = $childYear)\n";
+                    }
+                }
+
+                // Update Global for Child
+                if ($childYear !== null && isset($child['gedcom_id'])) {
+                     $globalYears[$child['gedcom_id']] = $childYear;
+                }
+
+                if ($isLastIter) {
+                    $processedChildren[] = [
+                        'data' => $child,
+                        'year' => $childYear,
+                        'is_fictional' => $childFictional
+                    ];
+                }
+
+                if ($childYear !== null) {
+                    $prevChildYear = $childYear;
+                }
+            }
+
+            // Prepare final object for view (Last Iteration Only)
+            if ($isLastIter) {
+                $processedMan = $man ? ['data' => $man, 'year' => $manYear, 'is_fictional' => $manFictional] : null;
+                $processedWoman = $woman ? ['data' => $woman, 'year' => $womanYear, 'is_fictional' => $womanFictional] : null;
+
+                $sortYear = $manYear ?? ($womanYear ?? 9999);
+
+                $logMsg .= "  [Final] SortYear: $sortYear, ManYear: " . ($manYear??'null') . ", WomanYear: " . ($womanYear??'null') . "\n";
+                file_put_contents($debugLog, $logMsg . "\n", FILE_APPEND);
+
+                $viewData[] = [
+                    'record_id' => $record['id'],
+                    'man' => $processedMan,
+                    'woman' => $processedWoman,
+                    'children' => $processedChildren,
+                    'sort_year' => $sortYear
+                ];
+            }
         }
-      }
-      return $foundNew;
-    };
-
-    // Initial collection
-    $collectGlobalYears();
-
-    // Process each record to apply business logic (date imputation)
-    foreach ($rawRecords as $record) {
-      $els = $elementsByRecord[$record['id']] ?? [];
-      
-      $man = null;
-      $woman = null;
-      $children = [];
-
-      foreach ($els as $e) {
-        if ($e['type'] === 'MUZ') $man = $e;
-        elseif ($e['type'] === 'ZENA') $woman = $e;
-        elseif ($e['type'] === 'DIETA') $children[] = $e;
-      }
-
-      $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
-
-      // 1. Extract Real Years (Local)
-      $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
-      $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
-      
-      // 2. Global Lookup if missing
-      if ($manYear === null && $man && isset($man['gedcom_id'])) {
-          if (isset($globalYears[$man['gedcom_id']])) {
-              $manYear = $globalYears[$man['gedcom_id']];
-              $logMsg .= "  [Global] Man found in other record: $manYear\n";
-          }
-      }
-      if ($womanYear === null && $woman && isset($woman['gedcom_id'])) {
-          if (isset($globalYears[$woman['gedcom_id']])) {
-              $womanYear = $globalYears[$woman['gedcom_id']];
-              $logMsg .= "  [Global] Woman found in other record: $womanYear\n";
-          }
-      }
-
-      $logMsg .= "  [Raw] Man: " . ($man ? ($man['birth_date']??'empty') : 'N/A') . " -> Year: " . ($manYear ?? 'null') . "\n";
-      $logMsg .= "  [Raw] Woman: " . ($woman ? ($woman['birth_date']??'empty') : 'N/A') . " -> Year: " . ($womanYear ?? 'null') . "\n";
-
-      $manFictional = false;
-      $womanFictional = false;
-
-      // -------------------------------------------------------
-      // IMPUTATION LOGIC
-      // -------------------------------------------------------
-
-      // A) Bottom-Up: Infer Parents from Children if parents missing
-      // (Only if BOTH parents are missing years, or at least we need an anchor)
-      // Actually, if we have children but no parents, we can anchor from the oldest child.
-      
-      $oldestChildYear = null;
-      foreach ($children as $child) {
-        $cy = $getYear($child['birth_date'] ?? '');
-        
-        // Global lookup for child
-        if ($cy === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
-            $cy = $globalYears[$child['gedcom_id']];
-            $logMsg .= "  [Global] Child ({$child['full_name']}) found: $cy\n";
-        }
-
-        $logMsg .= "  [Raw] Child ({$child['full_name']}): " . ($child['birth_date']??'empty') . " -> Year: " . ($cy ?? 'null') . "\n";
-        if ($cy !== null) {
-          if ($oldestChildYear === null || $cy < $oldestChildYear) {
-            $oldestChildYear = $cy;
-          }
-        }
-      }
-
-      // If woman is missing year but we have a child
-      if ($womanYear === null && $oldestChildYear !== null && $woman) {
-        $womanYear = $oldestChildYear - 20;
-        $womanFictional = true;
-        $logMsg .= "  [Logic] Woman imputed from oldest child ($oldestChildYear - 20 = $womanYear)\n";
-      }
-
-      // If man is missing year but we have a child (and wasn't imputed from woman yet)
-      if ($manYear === null && $oldestChildYear !== null && $man) {
-         // Logic: Child -> Mother(-20) -> Father(-10) implies Father = Child - 30
-         $manYear = $oldestChildYear - 30;
-         $manFictional = true;
-         $logMsg .= "  [Logic] Man imputed from oldest child ($oldestChildYear - 30 = $manYear)\n";
-      }
-
-      // B) Horizontal: Infer Spouse from Spouse
-      // "Ak je známy dátum narodenia manžela ale nie ženy, potom doplň rok narodenia ženy ako manžel +10 rokov"
-      if ($manYear !== null && $womanYear === null && $woman) {
-        $womanYear = $manYear + 10;
-        $womanFictional = true;
-        $logMsg .= "  [Logic] Woman imputed from Man ($manYear + 10 = $womanYear)\n";
-      }
-      // "Ak je známy dátum narodenia ženy ale nie manžela, potom manžel=žena-10 rokov"
-      elseif ($womanYear !== null && $manYear === null && $man) {
-        $manYear = $womanYear - 10;
-        $manFictional = true;
-        $logMsg .= "  [Logic] Man imputed from Woman ($womanYear - 10 = $manYear)\n";
-      }
-
-      // C) Top-Down: Infer Children from Mother (or Siblings)
-      $processedChildren = [];
-      $prevChildYear = null;
-
-      foreach ($children as $index => $child) {
-        $childYear = $getYear($child['birth_date'] ?? '');
-        
-        // Global lookup again (if not done in loop above or just to be safe)
-        if ($childYear === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
-            $childYear = $globalYears[$child['gedcom_id']];
-        }
-
-        $childFictional = false;
-
-        if ($childYear === null) {
-          // "Ak je známy dátum narodenia manželky ale neznámy dátum narodenia prvého dieťaťa, potom dieťa=mama+20"
-          if ($index === 0 && $womanYear !== null) {
-            $childYear = $womanYear + 20;
-            $childFictional = true;
-            $logMsg .= "  [Logic] Child #$index imputed from Woman ($womanYear + 20 = $childYear)\n";
-          }
-          // "Ak je známy dátum narodenia predchádzajúceho dieťaťa, potom ďalšie dieťa=predchádzajúce+3 roky"
-          elseif ($index > 0 && $prevChildYear !== null) {
-            $childYear = $prevChildYear + 3;
-            $childFictional = true;
-            $logMsg .= "  [Logic] Child #$index imputed from sibling ($prevChildYear + 3 = $childYear)\n";
-          }
-        }
-
-        // Save processed child
-        $processedChildren[] = [
-          'data' => $child,
-          'year' => $childYear,
-          'is_fictional' => $childFictional
-        ];
-
-        // Update tracker for next iteration
-        if ($childYear !== null) {
-          $prevChildYear = $childYear;
-        }
-      }
-
-      // Prepare final object for view
-      $processedMan = $man ? ['data' => $man, 'year' => $manYear, 'is_fictional' => $manFictional] : null;
-      $processedWoman = $woman ? ['data' => $woman, 'year' => $womanYear, 'is_fictional' => $womanFictional] : null;
-
-      // Determine Sort Key (Man's year, fallback to Woman's year, fallback to 9999)
-      $sortYear = $manYear ?? ($womanYear ?? 9999);
-
-      $logMsg .= "  [Final] SortYear: $sortYear, ManYear: " . ($manYear??'null') . ", WomanYear: " . ($womanYear??'null') . "\n";
-      file_put_contents($debugLog, $logMsg . "\n", FILE_APPEND);
-
-      $viewData[] = [
-        'record_id' => $record['id'],
-        'man' => $processedMan,
-        'woman' => $processedWoman,
-        'children' => $processedChildren,
-        'sort_year' => $sortYear
-      ];
     }
 
     // 4. Sort
