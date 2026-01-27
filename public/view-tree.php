@@ -4,8 +4,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/_layout.php';
 
+// Debug log helper
+$debugLog = __DIR__ . '/gedcom_debug.log';
+function debugLog(string $msg): void {
+    global $debugLog;
+    file_put_contents($debugLog, date('Y-m-d H:i:s') . " [view-tree] " . $msg . "\n", FILE_APPEND);
+}
+
+debugLog("=== VIEW-TREE START ===");
+
 $user = require_login();
 $treeId = (int)($_GET['id'] ?? 0);
+debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null'));
 
 if (!$treeId) {
     flash('error', 'Neznámy rodokmeň.');
@@ -32,6 +42,7 @@ $stmt = db()->prepare('
 ');
 $stmt->execute(['tree_id' => $treeId]);
 $rows = $stmt->fetchAll();
+debugLog("Fetched rows count: " . count($rows));
 
 $individuals = [];
 $families = [];
@@ -99,6 +110,8 @@ usort($sortedRecordIds, function($a, $b) use ($recordElements) {
 $orderedPersons = [];
 $seqNum = 1;
 
+debugLog("Sorted record IDs count: " . count($sortedRecordIds));
+
 foreach ($sortedRecordIds as $recordId) {
     $rec = $recordElements[$recordId];
     
@@ -115,6 +128,8 @@ foreach ($sortedRecordIds as $recordId) {
         $orderedPersons[] = $child;
     }
 }
+
+debugLog("Ordered persons count: " . count($orderedPersons));
 
 // Now build individuals and families from ordered persons
 foreach ($orderedPersons as $row) {
@@ -206,6 +221,26 @@ foreach ($families as $id => $fam) {
         $cleanFamilies[] = $fam;
     }
 }
+
+debugLog("Individuals count: " . count($individuals));
+debugLog("Families count: " . count($families));
+debugLog("Clean families count: " . count($cleanFamilies));
+
+// Log first few individuals for debugging
+$i = 0;
+foreach ($individuals as $key => $ind) {
+    if ($i++ < 5) {
+        debugLog("Individual [$key]: seqNum={$ind['seqNum']}, name={$ind['name']}, birthYear={$ind['birthYear']}");
+    }
+}
+
+// Log JSON encode test
+$testIndividuals = json_encode(array_values($individuals));
+$testFamilies = json_encode($cleanFamilies);
+debugLog("JSON individuals length: " . ($testIndividuals === false ? "ENCODE ERROR: " . json_last_error_msg() : strlen($testIndividuals)));
+debugLog("JSON families length: " . ($testFamilies === false ? "ENCODE ERROR: " . json_last_error_msg() : strlen($testFamilies)));
+
+debugLog("=== VIEW-TREE PHP DONE ===");
 
 // Check if embedded mode
 $isEmbed = !empty($_GET['embed']);
