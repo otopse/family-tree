@@ -319,6 +319,7 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     overflow: hidden; /* Prevent body scroll */
     margin: 0;
     padding: 0;
+    position: relative; /* For absolute positioning of auth-page */
   }
   
   /* Override auth-page padding for edit-tree - must override global .auth-page padding: 80px 0 */
@@ -332,17 +333,21 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     padding-left: 0 !important;
     padding-right: 0 !important;
     margin: 0 !important;
-    margin-top: 72px !important; /* Push down by navbar height (72px) */
+    margin-top: 0 !important; /* Changed: No margin-top, navbar is sticky so auth-page starts at top */
     margin-bottom: 0 !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
-    height: calc(100vh - 72px) !important; /* Subtract navbar height */
-    min-height: calc(100vh - 72px) !important;
-    max-height: calc(100vh - 72px) !important;
+    height: 100vh !important; /* Full viewport height */
+    min-height: 100vh !important;
+    max-height: 100vh !important;
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
-    position: relative;
+    position: absolute !important; /* Changed: Use absolute positioning */
+    top: 72px !important; /* Start below navbar */
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
     background: white !important; /* Match container background */
     box-sizing: border-box !important;
   }
@@ -350,6 +355,12 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
   /* Hide footer on edit-tree page */
   .footer {
     display: none !important;
+  }
+  
+  /* Ensure navbar has no margin-bottom that could create gap */
+  .navbar {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .container-fluid {
@@ -832,14 +843,70 @@ document.addEventListener('DOMContentLoaded', function() {
   // ===== GAP ANALYSIS =====
   console.log('[EDIT-TREE] ===== GAP ANALYSIS =====');
   
-  // Gap between navbar and auth-page
+  // Gap between navbar and auth-page (THIS MIGHT BE THE ISSUE)
   if (navbar && authPage) {
     const navRect = navbar.getBoundingClientRect();
     const authRect = authPage.getBoundingClientRect();
     const gap = authRect.top - navRect.bottom;
-    console.log('[EDIT-TREE] Gap between navbar.bottom and auth-page.top:', gap + 'px');
-    if (gap !== 0) {
-      console.warn('[EDIT-TREE] WARNING: Unexpected gap between navbar and auth-page!');
+    const navStyles = window.getComputedStyle(navbar);
+    const authStyles = window.getComputedStyle(authPage);
+    
+    console.log('[EDIT-TREE] ===== NAVBAR TO AUTH-PAGE GAP ANALYSIS =====');
+    console.log('[EDIT-TREE] navbar.bottom:', navRect.bottom + 'px');
+    console.log('[EDIT-TREE] auth-page.top:', authRect.top + 'px');
+    console.log('[EDIT-TREE] Gap (auth-page.top - navbar.bottom):', gap + 'px');
+    console.log('[EDIT-TREE] navbar margin-bottom:', navStyles.marginBottom);
+    console.log('[EDIT-TREE] navbar padding-bottom:', navStyles.paddingBottom);
+    console.log('[EDIT-TREE] auth-page margin-top:', authStyles.marginTop);
+    console.log('[EDIT-TREE] auth-page padding-top:', authStyles.paddingTop);
+    console.log('[EDIT-TREE] auth-page background:', authStyles.background);
+    console.log('[EDIT-TREE] auth-page background-color:', authStyles.backgroundColor);
+    
+    if (gap > 0) {
+      console.error('[EDIT-TREE] ERROR: Gap detected between navbar and auth-page!');
+      console.error('[EDIT-TREE] This gap of', gap + 'px is likely the white space you see!');
+      console.error('[EDIT-TREE] Expected: auth-page should start immediately after navbar');
+      
+      // Check if there are any elements between navbar and auth-page
+      const body = document.body;
+      let node = navbar.nextSibling;
+      const elementsBetween = [];
+      while (node && node !== authPage) {
+        if (node.nodeType === 1) { // Element node
+          const rect = node.getBoundingClientRect();
+          const styles = window.getComputedStyle(node);
+          elementsBetween.push({
+            tag: node.tagName,
+            className: node.className,
+            height: rect.height,
+            top: rect.top,
+            bottom: rect.bottom,
+            background: styles.background,
+            backgroundColor: styles.backgroundColor,
+            display: styles.display,
+            visibility: styles.visibility
+          });
+        } else if (node.nodeType === 3) { // Text node
+          const text = node.textContent.trim();
+          if (text.length > 0) {
+            elementsBetween.push({
+              type: 'text',
+              content: JSON.stringify(text)
+            });
+          }
+        }
+        node = node.nextSibling;
+      }
+      
+      if (elementsBetween.length > 0) {
+        console.error('[EDIT-TREE] Elements found between navbar and auth-page:', elementsBetween);
+      } else {
+        console.log('[EDIT-TREE] No elements found between navbar and auth-page');
+      }
+    } else if (gap < 0) {
+      console.warn('[EDIT-TREE] WARNING: Negative gap (overlap):', gap + 'px');
+    } else {
+      console.log('[EDIT-TREE] ✓ No gap between navbar and auth-page');
     }
   }
   
@@ -980,28 +1047,83 @@ document.addEventListener('DOMContentLoaded', function() {
   // Expose diagnostic function to window for manual debugging
   window.debugEditTreeLayout = function() {
     console.log('[EDIT-TREE] ===== MANUAL DIAGNOSTIC RUN =====');
+    const navbar = document.querySelector('.navbar');
     const authPage = document.querySelector('.auth-page');
     const containerFluid = document.querySelector('.container-fluid');
+    const editorHeader = document.querySelector('.editor-header');
     
     if (!authPage || !containerFluid) {
       console.error('[EDIT-TREE] ERROR: Required elements not found');
       return;
     }
     
+    const navRect = navbar ? navbar.getBoundingClientRect() : null;
     const authRect = authPage.getBoundingClientRect();
     const containerRect = containerFluid.getBoundingClientRect();
-    const gap = containerRect.top - authRect.top;
+    const headerRect = editorHeader ? editorHeader.getBoundingClientRect() : null;
     
+    const navStyles = navbar ? window.getComputedStyle(navbar) : null;
     const authStyles = window.getComputedStyle(authPage);
     const containerStyles = window.getComputedStyle(containerFluid);
+    const headerStyles = editorHeader ? window.getComputedStyle(editorHeader) : null;
     
-    console.log('[EDIT-TREE] Current gap:', gap + 'px');
-    console.log('[EDIT-TREE] auth-page padding-top:', authStyles.paddingTop);
-    console.log('[EDIT-TREE] auth-page margin-top:', authStyles.marginTop);
-    console.log('[EDIT-TREE] container-fluid margin-top:', containerStyles.marginTop);
-    console.log('[EDIT-TREE] container-fluid padding-top:', containerStyles.paddingTop);
-    console.log('[EDIT-TREE] auth-page.top:', authRect.top);
-    console.log('[EDIT-TREE] container-fluid.top:', containerRect.top);
+    console.log('[EDIT-TREE] ===== ALL GAPS =====');
+    if (navbar && navRect) {
+      const navToAuthGap = authRect.top - navRect.bottom;
+      console.log('[EDIT-TREE] Navbar to auth-page gap:', navToAuthGap + 'px');
+    }
+    const authToContainerGap = containerRect.top - authRect.top;
+    console.log('[EDIT-TREE] Auth-page to container-fluid gap:', authToContainerGap + 'px');
+    if (editorHeader && headerRect) {
+      const headerToSplitGap = containerRect.top - headerRect.bottom;
+      console.log('[EDIT-TREE] Editor-header to container-fluid gap:', headerToSplitGap + 'px');
+    }
+    
+    console.log('[EDIT-TREE] ===== COMPUTED STYLES =====');
+    if (navbar && navStyles) {
+      console.log('[EDIT-TREE] navbar:', {
+        height: navStyles.height,
+        marginBottom: navStyles.marginBottom,
+        paddingBottom: navStyles.paddingBottom,
+        background: navStyles.background
+      });
+    }
+    console.log('[EDIT-TREE] auth-page:', {
+      paddingTop: authStyles.paddingTop,
+      marginTop: authStyles.marginTop,
+      paddingBottom: authStyles.paddingBottom,
+      marginBottom: authStyles.marginBottom,
+      background: authStyles.background,
+      backgroundColor: authStyles.backgroundColor,
+      height: authStyles.height
+    });
+    console.log('[EDIT-TREE] container-fluid:', {
+      marginTop: containerStyles.marginTop,
+      paddingTop: containerStyles.paddingTop,
+      marginBottom: containerStyles.marginBottom,
+      paddingBottom: containerStyles.paddingBottom,
+      background: containerStyles.background,
+      backgroundColor: containerStyles.backgroundColor
+    });
+    if (editorHeader && headerStyles) {
+      console.log('[EDIT-TREE] editor-header:', {
+        marginTop: headerStyles.marginTop,
+        marginBottom: headerStyles.marginBottom,
+        paddingTop: headerStyles.paddingTop,
+        paddingBottom: headerStyles.paddingBottom,
+        height: headerStyles.height
+      });
+    }
+    
+    console.log('[EDIT-TREE] ===== POSITIONS =====');
+    if (navbar && navRect) {
+      console.log('[EDIT-TREE] navbar:', { top: navRect.top, bottom: navRect.bottom, height: navRect.height });
+    }
+    console.log('[EDIT-TREE] auth-page:', { top: authRect.top, bottom: authRect.bottom, height: authRect.height });
+    console.log('[EDIT-TREE] container-fluid:', { top: containerRect.top, bottom: containerRect.bottom, height: containerRect.height });
+    if (editorHeader && headerRect) {
+      console.log('[EDIT-TREE] editor-header:', { top: headerRect.top, bottom: headerRect.bottom, height: headerRect.height });
+    }
     
     // Check for text nodes
     let node = authPage.firstChild;
@@ -1027,7 +1149,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     return {
-      gap: gap,
+      navToAuthGap: navbar && navRect ? authRect.top - navRect.bottom : null,
+      authToContainerGap: authToContainerGap,
       authPageTop: authRect.top,
       containerTop: containerRect.top,
       authPagePaddingTop: authStyles.paddingTop,
