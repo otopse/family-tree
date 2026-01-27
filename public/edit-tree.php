@@ -75,228 +75,56 @@ try {
 
     // Debug Log Init
     $debugLog = __DIR__ . '/gedcom_debug.log';
-    file_put_contents($debugLog, "\n\n=== TILE CALCULATION DEBUG START " . date('Y-m-d H:i:s') . " ===\n", FILE_APPEND);
-
+    
     // Helper to safely get year from YYYY.MM.DD, YYYY-MM-DD, or YYYY
     $getYear = function($dateStr) {
       if (empty($dateStr)) return null;
-      // Clean up date string
       $dateStr = trim($dateStr);
+      // Remove brackets for calculation
+      $dateStr = str_replace(['[', ']'], '', $dateStr);
       
-      // Match start with 4 digits (YYYY...)
       if (preg_match('/^(\d{4})/', $dateStr, $m)) {
         return (int)$m[1];
       }
-      
-      // Fallback to strtotime
       $ts = strtotime($dateStr);
       return $ts ? (int)date('Y', $ts) : null;
     };
 
     // ---------------------------------------------------------
-    // 3. Global Date Lookup (Iterative)
+    // No on-the-fly calculation anymore.
+    // We just display what is in the DB.
     // ---------------------------------------------------------
-    // We need to fill in missing dates by looking up the same person in other records.
-    // We run 3 iterations to ensure propagation (Local -> Global -> Local).
 
-    // A. Initial Population of Global Years (Raw Data only)
-    $globalYears = [];
-    foreach ($allElements as $e) {
-        $gedId = $e['gedcom_id'] ?? null;
-        if (!$gedId) continue;
-        $y = $getYear($e['birth_date'] ?? '');
-        if ($y !== null) {
-             $globalYears[$gedId] = $y;
-        }
-    }
+    // Process each record for View
+    foreach ($rawRecords as $record) {
+      $els = $elementsByRecord[$record['id']] ?? [];
+      
+      $man = null;
+      $woman = null;
+      $children = [];
 
-    // B. Iterative Calculation
-    $TOTAL_ITERATIONS = 3;
+      foreach ($els as $e) {
+        if ($e['type'] === 'MUZ') $man = $e;
+        elseif ($e['type'] === 'ZENA') $woman = $e;
+        elseif ($e['type'] === 'DIETA') $children[] = $e;
+      }
 
-    for ($iter = 1; $iter <= $TOTAL_ITERATIONS; $iter++) {
-        $isLastIter = ($iter === $TOTAL_ITERATIONS);
-        
-        // Only log details on the last iteration to keep log size manageable
-        // Or log minimal info on previous iterations if needed.
-        // User asked for "debug info from import + calc", so let's log headers.
-        file_put_contents($debugLog, "\n--- ITERATION $iter ---\n", FILE_APPEND);
+      $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
+      $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
+      
+      // Determine Sort Key
+      $sortYear = $manYear ?? ($womanYear ?? 9999);
 
-        foreach ($rawRecords as $record) {
-            $els = $elementsByRecord[$record['id']] ?? [];
-            
-            $man = null;
-            $woman = null;
-            $children = [];
-
-            foreach ($els as $e) {
-                if ($e['type'] === 'MUZ') $man = $e;
-                elseif ($e['type'] === 'ZENA') $woman = $e;
-                elseif ($e['type'] === 'DIETA') $children[] = $e;
-            }
-
-            $logMsg = "";
-            if ($isLastIter) {
-                $logMsg = "Record #{$record['id']} (Pattern: {$record['pattern']})\n";
-            }
-
-            // 1. Extract Real Years (Local)
-            $manYear = $man ? $getYear($man['birth_date'] ?? '') : null;
-            $womanYear = $woman ? $getYear($woman['birth_date'] ?? '') : null;
-            
-            // 2. Global Lookup (Man/Woman)
-            // Always check global map if local is missing
-            if ($manYear === null && $man && isset($man['gedcom_id'])) {
-                if (isset($globalYears[$man['gedcom_id']])) {
-                    $manYear = $globalYears[$man['gedcom_id']];
-                    if ($isLastIter) $logMsg .= "  [Global] Man found in other record: $manYear\n";
-                }
-            }
-            if ($womanYear === null && $woman && isset($woman['gedcom_id'])) {
-                if (isset($globalYears[$woman['gedcom_id']])) {
-                    $womanYear = $globalYears[$woman['gedcom_id']];
-                    if ($isLastIter) $logMsg .= "  [Global] Woman found in other record: $womanYear\n";
-                }
-            }
-
-            if ($isLastIter) {
-                $logMsg .= "  [Raw] Man: " . ($man ? ($man['birth_date']??'empty') : 'N/A') . " -> Year: " . ($manYear ?? 'null') . "\n";
-                $logMsg .= "  [Raw] Woman: " . ($woman ? ($woman['birth_date']??'empty') : 'N/A') . " -> Year: " . ($womanYear ?? 'null') . "\n";
-            }
-
-            $manFictional = false;
-            $womanFictional = false;
-
-            // -------------------------------------------------------
-            // IMPUTATION LOGIC
-            // -------------------------------------------------------
-
-            // A) Bottom-Up: Infer Parents from Children
-            $oldestChildYear = null;
-            foreach ($children as $child) {
-                $cy = $getYear($child['birth_date'] ?? '');
-                
-                // Global lookup for child
-                if ($cy === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
-                    $cy = $globalYears[$child['gedcom_id']];
-                    if ($isLastIter) $logMsg .= "  [Global] Child ({$child['full_name']}) found: $cy\n";
-                }
-
-                if ($isLastIter) {
-                    $logMsg .= "  [Raw] Child ({$child['full_name']}): " . ($child['birth_date']??'empty') . " -> Year: " . ($cy ?? 'null') . "\n";
-                }
-                
-                if ($cy !== null) {
-                    // Update Global for Child immediately
-                    if (isset($child['gedcom_id'])) $globalYears[$child['gedcom_id']] = $cy;
-
-                    if ($oldestChildYear === null || $cy < $oldestChildYear) {
-                        $oldestChildYear = $cy;
-                    }
-                }
-            }
-
-            // If woman is missing year but we have a child
-            if ($womanYear === null && $oldestChildYear !== null && $woman) {
-                $womanYear = $oldestChildYear - 20;
-                $womanFictional = true;
-                if ($isLastIter) $logMsg .= "  [Logic] Woman imputed from oldest child ($oldestChildYear - 20 = $womanYear)\n";
-            }
-
-            // If man is missing year but we have a child (and wasn't imputed from woman yet)
-            if ($manYear === null && $oldestChildYear !== null && $man) {
-                $manYear = $oldestChildYear - 30;
-                $manFictional = true;
-                if ($isLastIter) $logMsg .= "  [Logic] Man imputed from oldest child ($oldestChildYear - 30 = $manYear)\n";
-            }
-
-            // B) Horizontal: Infer Spouse from Spouse
-            if ($manYear !== null && $womanYear === null && $woman) {
-                $womanYear = $manYear + 10;
-                $womanFictional = true;
-                if ($isLastIter) $logMsg .= "  [Logic] Woman imputed from Man ($manYear + 10 = $womanYear)\n";
-            }
-            elseif ($womanYear !== null && $manYear === null && $man) {
-                $manYear = $womanYear - 10;
-                $manFictional = true;
-                if ($isLastIter) $logMsg .= "  [Logic] Man imputed from Woman ($womanYear - 10 = $manYear)\n";
-            }
-
-            // Update Global for Parents immediately (so next records in this iter can use it)
-            if ($manYear !== null && isset($man['gedcom_id'])) $globalYears[$man['gedcom_id']] = $manYear;
-            if ($womanYear !== null && isset($woman['gedcom_id'])) $globalYears[$woman['gedcom_id']] = $womanYear;
-
-            // C) Top-Down: Infer Children from Mother (or Siblings)
-            // Only need to run full child logic on last iteration for display, 
-            // BUT we should run it in earlier iterations too if we want to propagate sibling dates?
-            // Yes, let's run it.
-            
-            $processedChildren = [];
-            $prevChildYear = null;
-
-            foreach ($children as $index => $child) {
-                $childYear = $getYear($child['birth_date'] ?? '');
-                
-                // Global lookup again
-                if ($childYear === null && isset($child['gedcom_id']) && isset($globalYears[$child['gedcom_id']])) {
-                    $childYear = $globalYears[$child['gedcom_id']];
-                }
-
-                $childFictional = false;
-
-                if ($childYear === null) {
-                    if ($index === 0 && $womanYear !== null) {
-                        $childYear = $womanYear + 20;
-                        $childFictional = true;
-                        if ($isLastIter) $logMsg .= "  [Logic] Child #$index imputed from Woman ($womanYear + 20 = $childYear)\n";
-                    }
-                    elseif ($index > 0 && $prevChildYear !== null) {
-                        $childYear = $prevChildYear + 3;
-                        $childFictional = true;
-                        if ($isLastIter) $logMsg .= "  [Logic] Child #$index imputed from sibling ($prevChildYear + 3 = $childYear)\n";
-                    }
-                }
-
-                // Update Global for Child
-                if ($childYear !== null && isset($child['gedcom_id'])) {
-                     $globalYears[$child['gedcom_id']] = $childYear;
-                }
-
-                if ($isLastIter) {
-                    $processedChildren[] = [
-                        'data' => $child,
-                        'year' => $childYear,
-                        'is_fictional' => $childFictional
-                    ];
-                }
-
-                if ($childYear !== null) {
-                    $prevChildYear = $childYear;
-                }
-            }
-
-            // Prepare final object for view (Last Iteration Only)
-            if ($isLastIter) {
-                $processedMan = $man ? ['data' => $man, 'year' => $manYear, 'is_fictional' => $manFictional] : null;
-                $processedWoman = $woman ? ['data' => $woman, 'year' => $womanYear, 'is_fictional' => $womanFictional] : null;
-
-                $sortYear = $manYear ?? ($womanYear ?? 9999);
-
-                $logMsg .= "  [Final] SortYear: $sortYear, ManYear: " . ($manYear??'null') . ", WomanYear: " . ($womanYear??'null') . "\n";
-                file_put_contents($debugLog, $logMsg . "\n", FILE_APPEND);
-
-                $viewData[] = [
-                    'record_id' => $record['id'],
-                    'man' => $processedMan,
-                    'woman' => $processedWoman,
-                    'children' => $processedChildren,
-                    'sort_year' => $sortYear
-                ];
-            }
-        }
+      $viewData[] = [
+        'record_id' => $record['id'],
+        'man' => $man,
+        'woman' => $woman,
+        'children' => $children,
+        'sort_year' => $sortYear
+      ];
     }
 
     // 4. Sort
-    // "Pri vyreportovaní dlaždíc ich usporiadaj od najmenšieho dátumu narodenia manžela po najvyšší."
     usort($viewData, function($a, $b) {
       return $a['sort_year'] <=> $b['sort_year'];
     });
@@ -309,67 +137,68 @@ try {
 // ---------------------------------------------------------
 // HELPER FOR VIEW
 // ---------------------------------------------------------
-function render_person_html(?array $personData): string {
-  if (!$personData) {
+function render_person_html(?array $el): string {
+  if (!$el) {
     return '<span class="empty-placeholder">&nbsp;</span>';
   }
 
-  $el = $personData['data'];
-  $year = $personData['year'];
-  $isFictional = $personData['is_fictional'];
-  
   $name = e($el['full_name']);
   $dateStr = '';
+
+  // Check if date is fictional/imputed (stored as [YYYY])
+  $birthDate = trim($el['birth_date'] ?? '');
+  $isFictional = false;
+  
+  if (strpos($birthDate, '[') === 0 && substr($birthDate, -1) === ']') {
+      $isFictional = true;
+      // Keep the brackets? Or strip them and re-add them via formatting?
+      // Since it's stored as [1850], we can just display it as is.
+      // But we need to handle the display logic for death dates too.
+      $birthDate = substr($birthDate, 1, -1); // Strip for formatting if needed, but wait...
+  }
 
   // Helper to format a single date string safely
   $formatDate = function($val) {
     if (empty($val)) return '';
     $val = trim($val);
-    // If it is just a year, return it as is to prevent strtotime parsing "1848" as "18:48 today"
+    $origVal = $val;
+    
+    // Check fictional inside formatter? 
+    // If it comes from DB as [1850], lets treat it carefully.
+    if (strpos($val, '[') === 0) return $val; // Return as is if already formatted with brackets
+
     if (preg_match('/^\d{4}$/', $val)) {
       return $val;
     }
-    // Try parse
     $ts = strtotime($val);
-    if (!$ts) return $val; // fallback to original string if parse fails
+    if (!$ts) return $val;
     return date('Y.m.d', $ts);
   };
-
-  // Calculate Display Date
-  if ($year) {
-    $birthStr = (string)$year; 
-    
-    // If NOT fictional, try to use full birth date from DB
-    if (!$isFictional && !empty($el['birth_date'])) {
-      $birthStr = $formatDate($el['birth_date']);
-    }
-
-    $deathStr = '';
-    if (!empty($el['death_date']) && $el['death_date'] !== date('Y-m-d')) {
+  
+  $birthStr = $formatDate($el['birth_date'] ?? '');
+  $deathStr = '';
+  
+  if (!empty($el['death_date']) && $el['death_date'] !== date('Y-m-d')) {
       $deathStr = $formatDate($el['death_date']);
-    }
-
-    $open = $isFictional ? '[' : '(';
-    $close = $isFictional ? ']' : ')'; 
-
-    if ($isFictional) {
-      // Fictional: [YYYY]
-      $dateStr = "{$open}{$birthStr}{$close}";
-    } else {
-      // Real dates: (Born - Died) or (Born)
-      if ($deathStr) {
-         $dateStr = "{$open}{$birthStr} - {$deathStr}{$close}";
-      } else {
-         $dateStr = "{$open}{$birthStr}{$close}";
-      }
-    }
-  } elseif (!empty($el['death_date']) && $el['death_date'] !== date('Y-m-d')) {
-      // Only death date known
-      $d = $formatDate($el['death_date']);
-      $dateStr = "(? - {$d})";
   }
 
-  return '<span class="person-name">' . $name . ' ' . $dateStr . '</span>';
+  if ($birthStr) {
+      if ($isFictional) {
+          // It's already [YYYY] from DB, so $birthStr is [YYYY]
+          $dateStr = $birthStr; 
+      } else {
+          // Real
+          if ($deathStr) {
+              $dateStr = "({$birthStr} - {$deathStr})";
+          } else {
+              $dateStr = "({$birthStr})";
+          }
+      }
+  } elseif ($deathStr) {
+      $dateStr = "(? - {$deathStr})";
+  }
+
+  return '<span class="person-name">' . $name . ' <span class="id-badge-inline">' . $el['id'] . '</span> ' . $dateStr . '</span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -382,150 +211,132 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
     </div>
     
-    <div class="view-toggles">
-      <button class="btn-toggle active" data-view="record-view">Record View</button>
-      <button class="btn-toggle" data-view="tree-view">Tree View</button>
-    </div>
-  </div>
+    <div class="split-view-container">
+    <!-- Left: Record View (Masonry) -->
+    <div id="record-view" class="split-pane left-pane">
+      <div class="toolbar">
+        <form method="post" action="/edit-tree.php?id=<?= $treeId ?>">
+          <input type="hidden" name="action" value="add_record">
+          <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
+        </form>
+        <div class="search-box">
+          <input type="text" placeholder="Hľadať..." class="form-control" style="width: 150px; padding: 4px 8px;">
+        </div>
+      </div>
 
-  <?php render_flash(); ?>
+      <div class="masonry-grid-single-col">
+        <?php if (empty($viewData)): ?>
+          <div class="empty-state">
+            <p>Žiadne záznamy.</p>
+          </div>
+        <?php else: ?>
+          <?php $counter = 1; ?>
+          <?php foreach ($viewData as $row): ?>
+            <div class="record-card">
+              <div class="record-id">#<?= $counter++ ?></div>
+              
+              <div class="record-row father-row">
+                <?php if ($row['man']): ?>
+                  <?= render_person_html($row['man']) ?>
+                <?php else: ?>
+                  <span class="empty-placeholder">&nbsp;</span>
+                <?php endif; ?>
+              </div>
 
-  <!-- Record View Section -->
-  <div id="record-view" class="view-section active">
-    <div class="toolbar">
-      <form method="post" action="/edit-tree.php?id=<?= $treeId ?>">
-        <input type="hidden" name="action" value="add_record">
-        <button type="submit" class="btn-primary">+ Pridať nový záznam</button>
-      </form>
-      <div class="search-box">
-        <input type="text" placeholder="Hľadať..." class="form-control" style="width: 200px;">
+              <div class="record-row mother-row">
+                <?php if ($row['woman']): ?>
+                  <?= render_person_html($row['woman']) ?>
+                <?php else: ?>
+                  <span class="empty-placeholder">&nbsp;</span>
+                <?php endif; ?>
+              </div>
+
+              <div class="children-list">
+                <?php foreach ($row['children'] as $child): ?>
+                  <div class="child-row">
+                    <?= render_person_html($child) ?>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
       </div>
     </div>
 
-    <div class="masonry-grid">
-      <?php if (empty($viewData)): ?>
-        <div class="empty-state">
-          <p>Tento rodokmeň zatiaľ neobsahuje žiadne záznamy (rodiny).</p>
-          <p>Začnite pridaním nového záznamu.</p>
-        </div>
-      <?php else: ?>
-        <?php $counter = 1; ?>
-        <?php foreach ($viewData as $row): ?>
-          <div class="record-card">
-            <!-- Counter ID instead of DB ID -->
-            <div class="record-id">#<?= $counter++ ?></div>
-            
-            <!-- Father Row -->
-            <div class="record-row father-row">
-              <?php if ($row['man']): ?>
-                <?= render_person_html($row['man']) ?>
-              <?php else: ?>
-                <span class="empty-placeholder">&nbsp;</span>
-              <?php endif; ?>
-            </div>
-
-            <!-- Mother Row -->
-            <div class="record-row mother-row">
-              <?php if ($row['woman']): ?>
-                <?= render_person_html($row['woman']) ?>
-              <?php else: ?>
-                <span class="empty-placeholder">&nbsp;</span>
-              <?php endif; ?>
-            </div>
-
-            <!-- Children List -->
-            <div class="children-list">
-              <?php foreach ($row['children'] as $child): ?>
-                <div class="child-row">
-                  <?= render_person_html($child) ?>
-                </div>
-              <?php endforeach; ?>
-            </div>
-          </div>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </div>
-  </div>
-
-  <!-- Tree View Section -->
-  <div id="tree-view" class="view-section">
-    <div class="tree-canvas-placeholder">
-      <p>Tu bude grafické zobrazenie rodokmeňa.</p>
-      <div style="font-size: 3rem; margin-top: 20px;">🌳</div>
+    <!-- Right: Tree View -->
+    <div id="tree-view" class="split-pane right-pane">
+      <iframe src="/view-tree.php?id=<?= $treeId ?>&embed=true" style="width:100%; height:100%; border:none;"></iframe>
     </div>
   </div>
 </div>
 
 <style>
+  html, body {
+    height: 100%;
+    overflow: hidden; /* Prevent body scroll */
+  }
+
   .container-fluid {
-    max-width: 100%;
-    padding: 0 24px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
   }
   
   .editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
+    flex: 0 0 auto;
+    padding: 10px 20px;
+    margin: 0;
     border-bottom: 1px solid var(--border-color);
-  }
-
-  .view-toggles {
-    display: flex;
-    background: var(--bg-secondary);
-    padding: 4px;
-    border-radius: 8px;
-    gap: 4px;
-  }
-
-  .btn-toggle {
-    border: none;
-    background: none;
-    padding: 8px 16px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 500;
-    color: var(--text-secondary);
-    transition: all 0.2s;
-  }
-
-  .btn-toggle.active {
     background: white;
-    color: var(--primary-color);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
   }
 
-  .view-section {
-    display: none;
-  }
+  .view-toggles { display: none; } /* Hide toggles as we show both */
 
-  .view-section.active {
-    display: block;
-    animation: fadeIn 0.3s ease;
-  }
-
-  .toolbar {
+  .split-view-container {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 16px;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
   }
 
-  /* Masonry Grid Styles */
-  .masonry-grid {
-    column-count: 1;
-    column-gap: 16px;
+  .split-pane {
+    overflow-y: auto;
+    height: 100%;
   }
-  
-  @media (min-width: 640px) {
-    .masonry-grid { column-count: 2; }
+
+  .left-pane {
+    width: 350px; /* Fixed width for tiles */
+    flex: 0 0 350px;
+    border-right: 1px solid var(--border-color);
+    background: #f8fafc;
+    padding: 16px;
   }
-  @media (min-width: 1024px) {
-    .masonry-grid { column-count: 3; }
+
+  .right-pane {
+    flex: 1;
+    background: white;
   }
-  @media (min-width: 1440px) {
-    .masonry-grid { column-count: 4; }
+
+  /* Single Column Grid for Left Pane */
+  .masonry-grid-single-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
+
+  /* Adjust Record Card for smaller space */
+  .record-card {
+    margin-bottom: 0;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+
+  /* Hide original grid styles to avoid conflict */
+  .masonry-grid { display: none; }
+  .view-section { display: block !important; }
+
 
   .record-card {
     break-inside: avoid;
@@ -600,6 +411,18 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .id-badge-inline {
+    background-color: #007bff;
+    color: white;
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-left: 6px;
+    margin-right: 4px;
+    vertical-align: middle;
+    font-weight: bold;
   }
 
   .tree-canvas-placeholder {

@@ -630,7 +630,7 @@ body {
   background: var(--bg-primary);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
-  max-width: 800px;
+  max-width: 1000px;
   width: 100%;
   margin: auto;
   position: relative;

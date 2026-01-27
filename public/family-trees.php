@@ -196,6 +196,8 @@ function renderTreeList(array $trees): void {
             <td class="actions-col">
               <a href="/view-tree.php?id=<?= $tree['id'] ?>" class="btn-icon" title="Vykresliť rodokmeň">👁️</a>
               <a href="/edit-tree.php?id=<?= $tree['id'] ?>" class="btn-icon" title="Editovať rodokmeň">👥</a>
+              <button type="button" class="btn-icon init-tree" title="Inicializovať (vymazať dopočítané)" onclick="initTree(<?= $tree['id'] ?>)">🔄</button>
+              <button type="button" class="btn-icon calc-tree" title="Dopočítať dátumy" onclick="calculateTree(<?= $tree['id'] ?>)">🧮</button>
               <button type="button" class="btn-icon edit-tree" data-id="<?= $tree['id'] ?>" title="Premenovať">✏️</button>
               <button type="button" class="btn-icon delete-tree" data-id="<?= $tree['id'] ?>" title="Zmazať" onclick="deleteTree(<?= $tree['id'] ?>)">🗑️</button>
             </td>
@@ -330,5 +332,60 @@ render_header('Moje rodokmene');
     </div>
   </div>
 </div>
+<script>
+async function initTree(id) {
+  if (!confirm('Naozaj chcete vymazať všetky dopočítané dátumy?')) return;
+  
+  try {
+    const fd = new FormData();
+    fd.append('action', 'init');
+    fd.append('tree_id', id);
+    
+    // Attempt to get CSRF
+    const csrf = document.querySelector('input[name="csrf_token"]');
+    if (csrf) fd.append('csrf_token', csrf.value);
+
+    const res = await fetch('/tree-actions.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    
+    if (data.success) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert('Chyba: ' + data.message);
+    }
+  } catch (e) {
+    alert('Chyba komunikácie: ' + e.message);
+  }
+}
+
+async function calculateTree(id) {
+  if (!confirm('Spustiť výpočet dátumov? Toto môže chvíľu trvať.')) return;
+  
+  try {
+    const fd = new FormData();
+    fd.append('action', 'calculate');
+    fd.append('tree_id', id);
+    
+    const csrf = document.querySelector('input[name="csrf_token"]');
+    if (csrf) fd.append('csrf_token', csrf.value);
+
+    const res = await fetch('/tree-actions.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    
+    if (data.success) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert('Chyba: ' + data.message);
+    }
+  } catch (e) {
+    alert('Chyba komunikácie: ' + e.message);
+  }
+}
+
+// ... existing deleteTree or others ...
+</script>
+
 <?php
 render_footer();

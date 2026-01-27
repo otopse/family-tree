@@ -50,32 +50,40 @@ foreach ($rows as $row) {
     $famId = $row['record_id'];
     
     // Process Individual
-    if ($row['gedcom_id'] && !isset($individuals[$row['gedcom_id']])) {
-        $bYear = extractYear($row['birth_date']);
-        $dYear = extractYear($row['death_date']);
-
-        // Fix: Ignore death date if it matches today (default value error)
-        if ($row['death_date'] === date('Y-m-d')) {
-             $dYear = null;
-             $row['death_date'] = null;
+    if ($row['gedcom_id']) {
+        if (!isset($individuals[$row['gedcom_id']])) {
+            $bYear = extractYear($row['birth_date']);
+            $dYear = extractYear($row['death_date']);
+    
+            // Fix: Ignore death date if it matches today (default value error)
+            if ($row['death_date'] === date('Y-m-d')) {
+                 $dYear = null;
+                 $row['death_date'] = null;
+            }
+            
+            // Sanity check/Defaults
+            if (!$bYear && $dYear) $bYear = $dYear - 60;
+            if (!$bYear) $bYear = 1900; // Fallback
+            if (!$dYear) $dYear = $bYear + 70; // Assumed lifespan if unknown
+            
+            $individuals[$row['gedcom_id']] = [
+                'id' => $row['gedcom_id'],
+                'name' => $row['full_name'],
+                'gender' => $row['gender'],
+                'birthYear' => $bYear,
+                'deathYear' => $dYear,
+                'birthDate' => $row['birth_date'],
+                'deathDate' => $row['death_date'],
+                'birthPlace' => $row['birth_place'],
+                'deathPlace' => $row['death_place'],
+                'recordIds' => [] // Initialize array for related records
+            ];
         }
-        
-        // Sanity check/Defaults
-        if (!$bYear && $dYear) $bYear = $dYear - 60;
-        if (!$bYear) $bYear = 1900; // Fallback
-        if (!$dYear) $dYear = $bYear + 70; // Assumed lifespan if unknown
-        
-        $individuals[$row['gedcom_id']] = [
-            'id' => $row['gedcom_id'],
-            'name' => $row['full_name'],
-            'gender' => $row['gender'],
-            'birthYear' => $bYear,
-            'deathYear' => $dYear,
-            'birthDate' => $row['birth_date'],
-            'deathDate' => $row['death_date'],
-            'birthPlace' => $row['birth_place'],
-            'deathPlace' => $row['death_place']
-        ];
+
+        // Add this record ID to the individual's list
+        if (!in_array($famId, $individuals[$row['gedcom_id']]['recordIds'])) {
+            $individuals[$row['gedcom_id']]['recordIds'][] = $famId;
+        }
     }
 
     // Build Family links
@@ -103,100 +111,92 @@ foreach ($families as $id => $fam) {
     }
 }
 
-render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
-?>
+// Check if embedded mode
+$isEmbed = !empty($_GET['embed']);
 
-<style>
-    body {
-        margin: 0;
-        overflow: hidden; /* Main scroll handled by container */
-    }
-    #tree-wrapper {
-        width: 100vw;
-        height: calc(100vh - 100px); /* Adjust for header */
-        overflow: auto;
-        position: relative;
-        background-color: #fdfdfd;
-        border-top: 1px solid #ddd;
-    }
-    #tree-svg {
-        display: block;
-    }
-    .person-box {
-        cursor: pointer;
-        filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1));
-        transition: filter 0.2s;
-    }
-    .person-box:hover {
-        filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.3));
-    }
-    .person-rect {
-        stroke: #999;
-        stroke-width: 1;
-    }
-    .person-rect.male {
-        fill: #e6f7ff;
-        stroke: #91d5ff;
-    }
-    .person-rect.female {
-        fill: #fff0f6;
-        stroke: #ffadd2;
-    }
-    .person-text {
-        font-family: 'Segoe UI', sans-serif;
-        font-size: 11px;
-        fill: #333;
-    }
-    .spouse-line {
-        stroke: #f5222d; /* Reddish for marriage */
-        stroke-dasharray: 4;
-    }
-    .child-line {
-        stroke: #1890ff;
-    }
-    .id-badge {
-        fill: black;
-    }
-    .id-text {
-        fill: white;
-        font-size: 9px;
-        font-family: monospace;
-        font-weight: bold;
-        text-anchor: middle;
-        dominant-baseline: central;
-    }
-    .connection-line {
-        fill: none;
-        stroke: #1890ff;
-        stroke-width: 1.5;
-        stroke-opacity: 0.4;
-    }
-    .grid-line {
-        stroke: #eee;
-        stroke-width: 1;
-    }
-    .grid-text {
-        fill: #aaa;
-        font-size: 12px;
-        font-family: sans-serif;
-    }
-</style>
-
-<div class="container-fluid p-0">
-    <div class="d-flex justify-content-between align-items-center p-3 bg-white border-bottom">
-        <h4 class="m-0"><?= e($tree['tree_name']) ?></h4>
-        <div>
-            <a href="/family-trees.php" class="btn btn-sm btn-outline-secondary">Späť</a>
+if ($isEmbed) {
+    // Minimal layout for embed
+    ?>
+    <!DOCTYPE html>
+    <html lang="sk">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Tree Embed</title>
+        <style>
+             body { margin: 0; overflow: hidden; font-family: sans-serif; }
+            #tree-wrapper { width: 100vw; height: 100vh; overflow: auto; background: #fff; position: relative; }
+            #tree-svg { display: block; }
+            /* Copy essential styles */
+            .person-box { cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1)); }
+            .person-box:hover { filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.3)); }
+            .person-rect { stroke: #999; stroke-width: 1; }
+            .person-rect.male { fill: #e6f7ff; stroke: #91d5ff; }
+            .person-rect.female { fill: #fff0f6; stroke: #ffadd2; }
+            .person-text { font-family: 'Segoe UI', sans-serif; font-size: 11px; fill: #333; }
+            .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
+            .child-line { stroke: #1890ff; }
+            .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
+            .id-badge { fill: #007bff; }
+            .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+            .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
+            .grid-line { stroke: #eee; stroke-width: 1; }
+            .grid-text { fill: #aaa; font-size: 12px; font-family: sans-serif; }
+        </style>
+    </head>
+    <body>
+        <div id="tree-wrapper">
+            <div id="loading" style="padding: 20px;">Načítavam graf...</div>
+        </div>
+        <!-- Hidden diagnostics for embed -->
+        <div id="diagnostics" style="display:none;"></div>
+    </body>
+    </html>
+    <?php
+} else {
+    // Normal full page layout
+    render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
+    ?>
+    <style>
+        /* ... existing full page styles ... */
+        body { margin: 0; overflow: hidden; }
+        #tree-wrapper { width: 100vw; height: calc(100vh - 60px); overflow: auto; background: #fdfdfd; border-top: 1px solid #ddd; }
+        /* ... styles ... */
+        /* Include the styles from previous version here or reference a css file */
+            .person-box { cursor: pointer; filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.1)); }
+            .person-box:hover { filter: drop-shadow(3px 3px 5px rgba(0,0,0,0.3)); }
+            .person-rect { stroke: #999; stroke-width: 1; }
+            .person-rect.male { fill: #e6f7ff; stroke: #91d5ff; }
+            .person-rect.female { fill: #fff0f6; stroke: #ffadd2; }
+            .person-text { font-family: 'Segoe UI', sans-serif; font-size: 11px; fill: #333; }
+            .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
+            .child-line { stroke: #1890ff; }
+            .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
+            .id-badge { fill: #007bff; }
+            .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+            .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
+            .grid-line { stroke: #eee; stroke-width: 1; }
+            .grid-text { fill: #aaa; font-size: 12px; font-family: sans-serif; }
+    </style>
+    
+    <div class="container-fluid p-0">
+        <div class="d-flex justify-content-between align-items-center p-3 bg-white border-bottom">
+            <h4 class="m-0"><?= e($tree['tree_name']) ?></h4>
+            <div>
+                <a href="/family-trees.php" class="btn btn-sm btn-outline-secondary">Späť</a>
+            </div>
+        </div>
+        
+        <div id="tree-wrapper">
+            <div id="loading" style="padding: 20px;">Načítavam graf...</div>
+        </div>
+        <div id="diagnostics" style="padding: 10px; border-top: 1px solid #ccc; background: #eee; height: 150px; overflow: auto; font-family: monospace; font-size: 12px;">
+            <strong>Diagnostika:</strong><br>
         </div>
     </div>
-    
-    <div id="tree-wrapper">
-        <div id="loading" style="padding: 20px;">Načítavam graf...</div>
-    </div>
-    <div id="diagnostics" style="padding: 10px; border-top: 1px solid #ccc; background: #eee; height: 150px; overflow: auto; font-family: monospace; font-size: 12px;">
-        <strong>Diagnostika:</strong><br>
-    </div>
-</div>
+    <?php
+}
+?>
 
 <script>
     function log(msg) {
@@ -208,28 +208,31 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         console.log(msg);
     }
 
+    // ... (rest of the script logic)
+    // We need to output the PHP data into JS variables
+    const individuals = <?= json_encode(array_values($individuals)) ?>;
+    const families = <?= json_encode($cleanFamilies) ?>;
+
+    // ... (rest of JS functions: initTree, etc) ...
+    // Copying the full JS logic here
+    
     window.onerror = function(msg, url, line, col, error) {
         log(`ERROR: ${msg} at ${line}:${col}`);
         return false;
     };
 
-    const individuals = <?= json_encode(array_values($individuals)) ?>;
-    const families = <?= json_encode($cleanFamilies) ?>;
-    
-    // Config
     const CONFIG = {
-        pixelsPerYear: 5, // Compressed X axis
+        pixelsPerYear: 5,
         rowHeight: 45,
         boxHeight: 30,
         minYear: 1800,
         maxYear: 2050,
         paddingX: 50,
         paddingY: 50,
-        charWidth: 7, // Estimate for width calculation
-        basePadding: 20 // Padding inside box
+        charWidth: 7,
+        basePadding: 20
     };
 
-    // Initialize
     document.addEventListener('DOMContentLoaded', () => {
         try {
             log("DOM Loaded. Starting initTree...");
@@ -247,9 +250,6 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         const loading = document.getElementById('loading');
         
         // 1. Prepare Data & Layout
-        log("Preparing layout...");
-        
-        // Map for easy lookup
         const indMap = {};
         individuals.forEach(i => indMap[i.id] = i);
 
@@ -257,19 +257,11 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         let minDataYear = Math.min(...individuals.map(i => i.birthYear));
         let maxDataYear = Math.max(...individuals.map(i => i.deathYear));
         
-        log(`Year range: ${minDataYear} - ${maxDataYear}`);
-        
         CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
-        CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50; // More space on right for spouse curves
+        CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50;
 
-        // Calculate Widths based on text length
+        // Calculate Widths
         individuals.forEach(ind => {
-            // Estimate width: name length + date string length
-            // Format: Meno Priezvisko (Nar - Umr)
-            // Or just [Rok] if dates unknown?
-            // The PHP part passes formatted dates, but we construct the string in JS for display.
-            // Let's reconstruct the display string to measure it.
-            
             let dateStr = "";
             if (ind.birthYear) {
                 dateStr = `${ind.birthYear}`;
@@ -277,36 +269,28 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
                     dateStr += ` - ${ind.deathYear}`;
                 }
             }
-            
             const displayText = `${ind.name} (${dateStr})`;
             ind.displayText = displayText;
             
-            // Estimate width
-            ind.width = (displayText.length * CONFIG.charWidth) + CONFIG.basePadding + 20; // +20 for ID badge
+            // Use displayId (gedcom_id) if available, or just id
+            ind.displayId = ind.id.replace(/@/g, ''); 
+            
+            ind.width = (displayText.length * CONFIG.charWidth) + CONFIG.basePadding + 20;
         });
 
         // 2. Vertical Layout (Ordering)
-        // We want to place related people close to each other.
-        // Strategy: DFS traversal starting from "roots" (people with no parents in the tree, or oldest ancestors).
-        log("Calculating vertical ordering...");
-        
         const visited = new Set();
         const orderedIndividuals = [];
 
-        // Find roots: People whose parents are not in the `individuals` list or are unknown
-        // We can use the parentMap from PHP, but we didn't pass it fully.
-        // Let's infer roots: People who are not children in any family in `families` list.
+        // Infer roots
         const allChildren = new Set();
         families.forEach(f => {
             if (f.children) f.children.forEach(c => allChildren.add(c));
         });
 
         const roots = individuals.filter(i => !allChildren.has(i.id));
-        // Sort roots by birth year
         roots.sort((a, b) => a.birthYear - b.birthYear);
         
-        log(`Found ${roots.length} root individuals`);
-
         function traverse(indId) {
             if (visited.has(indId)) return;
             visited.add(indId);
@@ -316,10 +300,8 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             
             orderedIndividuals.push(ind);
 
-            // Find spouses and process them immediately
-            // We need to find families where this person is a parent
+            // Spouses
             const myFamilies = families.filter(f => f.husb === indId || f.wife === indId);
-            
             myFamilies.forEach(fam => {
                 const spouseId = (fam.husb === indId) ? fam.wife : fam.husb;
                 if (spouseId && !visited.has(spouseId)) {
@@ -327,13 +309,12 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
                 }
             });
 
-            // Process children for each family
+            // Children
             myFamilies.forEach(fam => {
                 if (fam.children) {
-                    // Sort children by birth year
                     const kids = fam.children
                         .map(id => indMap[id])
-                        .filter(k => k) // filter nulls
+                        .filter(k => k)
                         .sort((a, b) => a.birthYear - b.birthYear);
                         
                     kids.forEach(kid => {
@@ -343,40 +324,29 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             });
         }
 
-        // Run traversal
         roots.forEach(root => traverse(root.id));
-        
-        // Process any remaining disconnected individuals
         individuals.forEach(ind => {
-            if (!visited.has(ind.id)) {
-                traverse(ind.id);
-            }
+            if (!visited.has(ind.id)) traverse(ind.id);
         });
 
-        // Assign Row Indices
         orderedIndividuals.forEach((ind, idx) => {
             ind.rowIndex = idx;
         });
 
-        // Calculate total dimensions
         const totalWidth = (CONFIG.maxYear - CONFIG.minYear) * CONFIG.pixelsPerYear + (CONFIG.paddingX * 2);
         const totalHeight = (orderedIndividuals.length * CONFIG.rowHeight) + (CONFIG.paddingY * 2);
 
-        log(`Canvas dimensions: ${totalWidth}x${totalHeight}`);
-
         // 3. Render SVG
-        log("Rendering SVG...");
         const ns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(ns, "svg");
         svg.setAttribute("width", totalWidth);
         svg.setAttribute("height", totalHeight);
         svg.id = "tree-svg";
 
-        // Draw Grid (Vertical lines for years)
+        // Grid
         const gridGroup = document.createElementNS(ns, "g");
         for (let y = CONFIG.minYear; y <= CONFIG.maxYear; y += 10) {
             const x = getX(y);
-            
             const line = document.createElementNS(ns, "line");
             line.setAttribute("x1", x);
             line.setAttribute("y1", 0);
@@ -397,11 +367,10 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         }
         svg.appendChild(gridGroup);
 
-        // Draw Connections
+        // Connections
         const connectionsGroup = document.createElementNS(ns, "g");
         
-        // 1. Spouse Connections (Curved line on the right)
-        // "Manželské páry spájaj čiarami, ktoré vychádzajú a vchádzajú z pravej strany ich tehál."
+        // Spouses
         const processedSpouses = new Set();
         families.forEach(fam => {
             if (fam.husb && fam.wife) {
@@ -414,19 +383,15 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
 
                     const hX = getX(h.birthYear) + h.width;
                     const hY = getY(h) + (CONFIG.boxHeight / 2);
-                    
                     const wX = getX(w.birthYear) + w.width;
                     const wY = getY(w) + (CONFIG.boxHeight / 2);
 
-                    // Control points for curve on the right
                     const cpOffset = 30;
                     const cp1X = Math.max(hX, wX) + cpOffset;
-                    const cp1Y = hY;
                     const cp2X = Math.max(hX, wX) + cpOffset;
-                    const cp2Y = wY;
 
                     const path = document.createElementNS(ns, "path");
-                    const d = `M ${hX} ${hY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${wX} ${wY}`;
+                    const d = `M ${hX} ${hY} C ${cp1X} ${hY}, ${cp2X} ${wY}, ${wX} ${wY}`;
                     path.setAttribute("d", d);
                     path.setAttribute("class", "connection-line spouse-line");
                     connectionsGroup.appendChild(path);
@@ -434,18 +399,13 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             }
         });
 
-        // 2. Parent-Child Connections (Mother -> Child)
-        // "Čiara smerujúca k dieťaťu musí začínať na tehle matky... presne 20 pixelov od ľavého okraja"
+        // Children
         families.forEach(fam => {
             if (!fam.children || fam.children.length === 0) return;
-
-            // Prefer Mother, then Father
             const parentId = fam.wife ? fam.wife : fam.husb;
             const parent = indMap[parentId];
-            
             if (!parent) return;
 
-            // Anchor point: 20px from left edge of parent
             const startX = getX(parent.birthYear) + 20;
             const startY = getY(parent) + CONFIG.boxHeight;
 
@@ -453,43 +413,25 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
                 const child = indMap[childId];
                 if (!child) return;
 
-                // Child anchor: Left edge, middle of height
                 const endX = getX(child.birthYear);
                 const endY = getY(child) + (CONFIG.boxHeight / 2);
 
                 const path = document.createElementNS(ns, "path");
-                
-                // Curve logic: Down then Right
-                // M startX startY
-                // C startX (startY + endY)/2, startX (startY + endY)/2, startX endY ?? No
-                // Let's try a simple Bezier
-                // Control point 1: Below start
-                // Control point 2: Left of end
-                
-                const cp1X = startX;
-                const cp1Y = endY; // Go down to child's level
-                const cp2X = (startX + endX) / 2; 
-                const cp2Y = endY;
-
-                // If child is to the right of the anchor
                 const d = `M ${startX} ${startY} C ${startX} ${startY + 20}, ${endX - 20} ${endY}, ${endX} ${endY}`;
-                
                 path.setAttribute("d", d);
                 path.setAttribute("class", "connection-line child-line");
                 connectionsGroup.appendChild(path);
             });
         });
-
         svg.appendChild(connectionsGroup);
 
-        // Draw Individuals (Bricks)
+        // Boxes
         const boxesGroup = document.createElementNS(ns, "g");
         orderedIndividuals.forEach(ind => {
             const g = document.createElementNS(ns, "g");
             g.setAttribute("class", "person-box");
             g.setAttribute("transform", `translate(${getX(ind.birthYear)}, ${getY(ind)})`);
             
-            // Box
             const rect = document.createElementNS(ns, "rect");
             rect.setAttribute("width", ind.width);
             rect.setAttribute("height", CONFIG.boxHeight);
@@ -497,7 +439,6 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
             g.appendChild(rect);
 
-            // ID Badge (Right edge)
             const badgeSize = 14;
             const badge = document.createElementNS(ns, "rect");
             badge.setAttribute("x", ind.width - badgeSize);
@@ -514,7 +455,6 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
             idText.textContent = ind.displayId;
             g.appendChild(idText);
 
-            // Text content
             const text = document.createElementNS(ns, "text");
             text.setAttribute("x", 5);
             text.setAttribute("y", CONFIG.boxHeight / 2);
@@ -527,22 +467,14 @@ render_header('Zobrazenie rodokmeňa: ' . e($tree['tree_name']));
         });
         svg.appendChild(boxesGroup);
 
-        // Finish
-        log("Rendering complete.");
-        loading.remove();
+        if (loading) loading.remove();
         wrapper.appendChild(svg);
     }
 
-    // Helpers
     function getX(year) {
         return (year - CONFIG.minYear) * CONFIG.pixelsPerYear + CONFIG.paddingX;
     }
-
     function getY(ind) {
         return ind.rowIndex * CONFIG.rowHeight + CONFIG.paddingY;
     }
-
-
 </script>
-
-<?php // No footer needed really for full screen view, or minimal one ?>
