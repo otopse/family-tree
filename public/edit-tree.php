@@ -190,7 +190,7 @@ function render_person_html(?array $el, int $seqNum): string {
       $dateStr = "(? - {$deathStr})";
   }
 
-  return '<span class="person-name"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . ' <span class="id-badge-inline">' . $el['id'] . '</span></span>';
+  return '<span class="person-name"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . '</span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -202,8 +202,9 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
       <a href="/family-trees.php" class="btn-secondary" style="padding: 6px 12px;">← Späť</a>
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
     </div>
+  </div>
     
-    <div class="split-view-container">
+  <div class="split-view-container">
     <!-- Left: Record View (Masonry) -->
     <div id="record-view" class="split-pane left-pane">
       <div class="toolbar">
@@ -290,11 +291,10 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     display: flex;
     flex: 1;
     overflow: hidden;
-    height: 100%;
+    min-height: 0; /* Important for flex children to scroll */
   }
 
   .split-pane {
-    overflow-y: auto;
     height: 100%;
   }
 
@@ -306,6 +306,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     padding: 16px;
     overflow-y: auto;
     overflow-x: hidden;
+    height: 100%;
   }
 
   /* Custom scrollbar styling */
@@ -424,18 +425,6 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .id-badge-inline {
-    background-color: #007bff;
-    color: white;
-    padding: 1px 4px;
-    border-radius: 4px;
-    font-size: 11px;
-    margin-left: 6px;
-    margin-right: 4px;
-    vertical-align: middle;
-    font-weight: bold;
   }
 
   .seq-badge {
