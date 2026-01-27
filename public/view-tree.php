@@ -241,6 +241,7 @@ debugLog("JSON individuals length: " . ($testIndividuals === false ? "ENCODE ERR
 debugLog("JSON families length: " . ($testFamilies === false ? "ENCODE ERROR: " . json_last_error_msg() : strlen($testFamilies)));
 
 debugLog("=== VIEW-TREE PHP DONE ===");
+debugLog("About to output HTML/JS. Individuals count: " . count($individuals) . ", Families count: " . count($cleanFamilies));
 
 // Check if embedded mode
 $isEmbed = !empty($_GET['embed']);
@@ -329,91 +330,136 @@ if ($isEmbed) {
 }
 ?>
 
+<?php
+// Log that we're about to output JavaScript
+debugLog("Outputting JavaScript section...");
+?>
+
 <script>
-    function log(msg) {
+<?php
+// Log immediately after script tag opens
+debugLog("JavaScript script tag opened");
+?>
+    // Function to log to server debug file (with retry and localStorage fallback)
+    function debugLog(msg, context = '') {
+        const fullMsg = msg + (context ? ' | ' + context : '');
+        console.log('[DEBUG]', fullMsg);
+        
         const d = document.getElementById('diagnostics');
         if (d) {
-            d.innerHTML += msg + '<br>';
+            d.innerHTML += fullMsg + '<br>';
             d.scrollTop = d.scrollHeight;
         }
-        console.log(msg);
-    }
-
-    // Function to log to server debug file
-    function debugLog(msg, context = '') {
-        log(msg);
+        
+        // Try to send to server, but don't block on errors
         try {
+            const logData = { message: msg, context: context };
             fetch('/api/debug-log.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: msg, context: context })
+                body: JSON.stringify(logData)
+            }).then(response => {
+                if (!response.ok) {
+                    console.error('Debug log API returned:', response.status, response.statusText);
+                }
+                return response.json();
+            }).then(data => {
+                // Success
             }).catch(err => {
                 console.error('Failed to log to server:', err);
+                // Store in localStorage as fallback
+                try {
+                    const logs = JSON.parse(localStorage.getItem('debugLogs') || '[]');
+                    logs.push({ time: new Date().toISOString(), msg: fullMsg });
+                    if (logs.length > 100) logs.shift(); // Keep last 100
+                    localStorage.setItem('debugLogs', JSON.stringify(logs));
+                } catch (e) {
+                    console.error('Failed to store log in localStorage:', e);
+                }
             });
         } catch (e) {
             console.error('Error in debugLog:', e);
         }
     }
-
-    // ... (rest of the script logic)
-    // We need to output the PHP data into JS variables
-    debugLog("=== JS INIT START ===");
-    debugLog("Browser: " + navigator.userAgent);
-    debugLog("URL: " + window.location.href);
     
-    let individuals, families;
-    try {
-        const individualsRaw = <?= json_encode(array_values($individuals)) ?>;
-        const familiesRaw = <?= json_encode($cleanFamilies) ?>;
-        
-        debugLog(`Raw PHP data received - individuals type: ${typeof individualsRaw}, families type: ${typeof familiesRaw}`);
-        
-        individuals = individualsRaw;
-        families = familiesRaw;
-        
-        debugLog(`PHP data loaded: individuals=${Array.isArray(individuals) ? individuals.length : 'INVALID'}, families=${Array.isArray(families) ? families.length : 'INVALID'}`);
-        
-        if (!Array.isArray(individuals)) {
-            debugLog("ERROR: individuals is not an array! Type: " + typeof individuals, JSON.stringify(individuals));
-            individuals = [];
-        } else if (individuals.length > 0) {
-            debugLog(`First individual sample: ${JSON.stringify(individuals[0])}`);
-        }
-        
-        if (!Array.isArray(families)) {
-            debugLog("ERROR: families is not an array! Type: " + typeof families, JSON.stringify(families));
-            families = [];
-        } else if (families.length > 0) {
-            debugLog(`First family sample: ${JSON.stringify(families[0])}`);
-        }
-        
-        if (individuals.length === 0) {
-            debugLog("WARNING: individuals array is empty!");
-        }
-        if (families.length === 0) {
-            debugLog("WARNING: families array is empty!");
-        }
-    } catch (e) {
-        debugLog("CRITICAL: Failed to parse PHP JSON data: " + e.message, e.stack);
-        individuals = [];
-        families = [];
+    function log(msg) {
+        debugLog(msg);
     }
+
+    // Global error handler - log immediately
+    window.addEventListener('error', function(event) {
+        debugLog(`WINDOW ERROR: ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`, event.error?.stack);
+    });
+    
+    window.addEventListener('unhandledrejection', function(event) {
+        debugLog(`UNHANDLED PROMISE REJECTION: ${event.reason}`, event.reason?.stack || '');
+    });
+
+    // Parse PHP data immediately but safely
+    let individuals = [];
+    let families = [];
+    
+    (function() {
+        try {
+            // First, try to log that script started
+            console.log('[JS] Script starting...');
+            
+            // Try to parse JSON data from PHP
+            const individualsRaw = <?= json_encode(array_values($individuals), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+            const familiesRaw = <?= json_encode($cleanFamilies, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+            
+            console.log('[JS] JSON parsed successfully');
+            
+            individuals = individualsRaw;
+            families = familiesRaw;
+            
+            console.log(`[JS] Data loaded: individuals=${Array.isArray(individuals) ? individuals.length : 'INVALID'}, families=${Array.isArray(families) ? families.length : 'INVALID'}`);
+            
+            if (!Array.isArray(individuals)) {
+                console.error('[JS] ERROR: individuals is not an array!', typeof individuals);
+                individuals = [];
+            }
+            
+            if (!Array.isArray(families)) {
+                console.error('[JS] ERROR: families is not an array!', typeof families);
+                families = [];
+            }
+            
+            // Now that we know debugLog exists, use it
+            if (typeof debugLog === 'function') {
+                debugLog("=== JS SCRIPT LOADED ===");
+                debugLog("Browser: " + (navigator.userAgent || 'unknown'));
+                debugLog("URL: " + window.location.href);
+                debugLog(`Raw PHP data received - individuals type: ${typeof individualsRaw}, families type: ${typeof familiesRaw}`);
+                debugLog(`PHP data loaded: individuals=${Array.isArray(individuals) ? individuals.length : 'INVALID'}, families=${Array.isArray(families) ? families.length : 'INVALID'}`);
+                
+                if (individuals.length > 0) {
+                    debugLog(`First individual sample: id=${individuals[0].id}, name=${individuals[0].name}, birthYear=${individuals[0].birthYear}`);
+                }
+                
+                if (families.length > 0) {
+                    debugLog(`First family sample: husb=${families[0].husb}, wife=${families[0].wife}, children=${families[0].children?.length || 0}`);
+                }
+                
+                if (individuals.length === 0) {
+                    debugLog("WARNING: individuals array is empty!");
+                }
+                if (families.length === 0) {
+                    debugLog("WARNING: families array is empty!");
+                }
+            }
+        } catch (e) {
+            console.error('[JS] CRITICAL: Failed to parse PHP JSON data:', e);
+            if (typeof debugLog === 'function') {
+                debugLog("CRITICAL: Failed to parse PHP JSON data: " + e.message, e.stack);
+            }
+            individuals = [];
+            families = [];
+        }
+    })();
 
     // ... (rest of JS functions: initTree, etc) ...
     // Copying the full JS logic here
-    
-    window.onerror = function(msg, url, line, col, error) {
-        const errorMsg = `ERROR: ${msg} at ${line}:${col}${error ? ' | ' + error.stack : ''}`;
-        log(errorMsg);
-        debugLog(errorMsg, `URL: ${url}`);
-        return false;
-    };
-    
-    window.addEventListener('unhandledrejection', function(event) {
-        const errorMsg = `UNHANDLED PROMISE REJECTION: ${event.reason}`;
-        log(errorMsg);
-        debugLog(errorMsg, event.reason?.stack || '');
-    });
 
     const CONFIG = {
         pixelsPerYear: 5,
@@ -427,21 +473,53 @@ if ($isEmbed) {
         basePadding: 20
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        // DOM already loaded
+        init();
+    }
+    
+    function init() {
         try {
-            debugLog("DOM Loaded. Starting initTree...");
+            debugLog("=== DOM READY - Starting initialization ===");
+            debugLog(`Data available: individuals=${individuals.length}, families=${families.length}`);
+            
+            const wrapper = document.getElementById('tree-wrapper');
+            const loading = document.getElementById('loading');
+            
+            if (!wrapper) {
+                debugLog("ERROR: tree-wrapper element not found!");
+                return;
+            }
+            debugLog("tree-wrapper found");
+            
+            if (!loading) {
+                debugLog("WARNING: loading element not found");
+            } else {
+                debugLog("loading element found");
+            }
+            
+            debugLog("Calling initTree()...");
             initTree();
             debugLog("initTree() completed successfully");
         } catch (e) {
-            const errorMsg = "CRITICAL ERROR in initTree: " + e.message;
-            log(errorMsg);
+            const errorMsg = "CRITICAL ERROR in init: " + e.message;
             debugLog(errorMsg, e.stack);
             console.error(e);
+            
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.textContent = "Chyba: " + e.message;
+                loading.style.color = 'red';
+            }
         }
-    });
+    }
 
     function initTree() {
-        debugLog(`initTree() called. Data: ${individuals.length} individuals, ${families.length} families`);
+        debugLog(`=== initTree() called ===`);
+        debugLog(`Data: ${individuals.length} individuals, ${families.length} families`);
         
         const wrapper = document.getElementById('tree-wrapper');
         const loading = document.getElementById('loading');
@@ -454,6 +532,8 @@ if ($isEmbed) {
         
         if (!loading) {
             debugLog("WARNING: loading element not found");
+        } else {
+            debugLog("loading element found");
         }
         
         if (individuals.length === 0) {
@@ -767,4 +847,12 @@ if ($isEmbed) {
         }
         return ind.rowIndex * CONFIG.rowHeight + CONFIG.paddingY;
     }
+    
+    // Log that script finished loading
+    debugLog("=== JavaScript script fully loaded ===");
 </script>
+
+<?php
+// Log after script closes
+debugLog("JavaScript script tag closed. Page output complete.");
+?>
