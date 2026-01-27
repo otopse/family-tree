@@ -328,6 +328,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    background: white; /* Match container background */
   }
   
   /* Hide footer on edit-tree page */
@@ -341,6 +342,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     flex-direction: column;
     padding: 0 !important;
     margin: 0 !important;
+    margin-top: 0 !important;
     min-height: 0; /* Important for flex children */
     overflow: hidden;
     height: 100%;
@@ -350,6 +352,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     flex: 0 0 auto;
     padding: 10px 20px;
     margin: 0;
+    margin-top: 0 !important;
     border-bottom: 1px solid var(--border-color);
     background: white;
   }
@@ -510,15 +513,16 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
   .seq-badge {
     background-color: #10b981;
     color: white;
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 13px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
     margin-right: 4px;
     vertical-align: middle;
     font-weight: bold;
-    min-width: 20px;
+    min-width: 18px;
     display: inline-block;
     text-align: center;
+    line-height: 1.2;
   }
   
   .person-name {

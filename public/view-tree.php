@@ -296,7 +296,7 @@ if ($isEmbed) {
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .person-box.selected .person-rect { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .id-badge { fill: #10b981; }
-            .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+            .id-text { fill: white; font-size: 14px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
             .grid-line { stroke: #eee; stroke-width: 1; }
             .grid-text { fill: #aaa; font-size: 12px; font-family: sans-serif; }
@@ -332,7 +332,7 @@ if ($isEmbed) {
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .person-box.selected .person-rect { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .id-badge { fill: #10b981; }
-            .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
+            .id-text { fill: white; font-size: 14px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
             .grid-line { stroke: #eee; stroke-width: 1; }
             .grid-text { fill: #aaa; font-size: 12px; font-family: sans-serif; }
@@ -550,8 +550,8 @@ debugLog("JavaScript script tag opened");
         debugLog(`Data: ${individuals.length} individuals, ${families.length} families`);
         
         // Constants used throughout the function
-        const badgeWidth = 22;
-        const badgeHeight = 16;
+        const badgeWidth = 28; // Increased from 22
+        const badgeHeight = 20; // Increased from 16
         const badgeMargin = 4;
         
         const wrapper = document.getElementById('tree-wrapper');
@@ -852,7 +852,7 @@ debugLog("JavaScript script tag opened");
                 idText.setAttribute("x", 3 + badgeWidth / 2);
                 idText.setAttribute("y", CONFIG.boxHeight / 2);
                 idText.setAttribute("class", "id-text");
-                idText.setAttribute("font-size", "11px");
+                idText.setAttribute("font-size", "14px");
                 idText.textContent = ind.displayId || idx + 1;
                 g.appendChild(idText);
 
@@ -957,7 +957,7 @@ debugLog("JavaScript script tag opened");
                 } else if (element.classList.contains('id-badge')) {
                     styleStr += 'fill:#10b981;';
                 } else if (element.classList.contains('id-text')) {
-                    styleStr += 'fill:white;font-size:11px;font-family:monospace;font-weight:bold;';
+                    styleStr += 'fill:white;font-size:14px;font-family:monospace;font-weight:bold;';
                 } else if (element.classList.contains('person-text')) {
                     styleStr += 'fill:#333;font-size:14px;font-family:Segoe UI, sans-serif;';
                 } else if (element.classList.contains('grid-text')) {
@@ -993,7 +993,7 @@ debugLog("JavaScript script tag opened");
                 .person-rect.male { fill: #e6f7ff; stroke: #91d5ff; stroke-width: 1; }
                 .person-rect.female { fill: #fff0f6; stroke: #ffadd2; stroke-width: 1; }
                 .id-badge { fill: #10b981; }
-                .id-text { fill: white; font-size: 11px; font-family: monospace; font-weight: bold; }
+                .id-text { fill: white; font-size: 14px; font-family: monospace; font-weight: bold; }
                 .person-text { fill: #333; font-size: 14px; font-family: 'Segoe UI', sans-serif; }
                 .grid-text { fill: #aaa; font-size: 14px; font-family: sans-serif; }
                 .spouse-line { stroke: #f5222d; stroke-dasharray: 4; fill: none; stroke-width: 1.5; }
