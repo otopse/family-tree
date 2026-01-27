@@ -6,16 +6,24 @@ require_once __DIR__ . '/_layout.php';
 
 // Debug log helper
 $debugLog = __DIR__ . '/gedcom_debug.log';
+
+// Check if this is embedded mode
+$isEmbed = !empty($_GET['embed']);
+
+// View-tree.php never initializes the log - it only appends
+// The log is initialized only by edit-tree.php
+// Add separator to distinguish different view-tree calls
+file_put_contents($debugLog, "\n" . str_repeat("=", 80) . "\n", FILE_APPEND);
+file_put_contents($debugLog, date('Y-m-d H:i:s') . " [view-tree" . ($isEmbed ? "-embed" : "") . "] === VIEW-TREE START ===\n", FILE_APPEND);
+
 function debugLog(string $msg): void {
     global $debugLog;
     file_put_contents($debugLog, date('Y-m-d H:i:s') . " [view-tree] " . $msg . "\n", FILE_APPEND);
 }
 
-debugLog("=== VIEW-TREE START ===");
-
 $user = require_login();
 $treeId = (int)($_GET['id'] ?? 0);
-debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null'));
+debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null') . ", Embed mode: " . ($isEmbed ? 'yes' : 'no'));
 
 if (!$treeId) {
     flash('error', 'Neznámy rodokmeň.');
@@ -261,8 +269,7 @@ debugLog("JSON families length: " . ($testFamilies === false ? "ENCODE ERROR: " 
 debugLog("=== VIEW-TREE PHP DONE ===");
 debugLog("About to output HTML/JS. Individuals count: " . count($individuals) . ", Families count: " . count($cleanFamilies));
 
-// Check if embedded mode
-$isEmbed = !empty($_GET['embed']);
+// Check if embedded mode (already checked above, but keep for compatibility)
 
 if ($isEmbed) {
     // Minimal layout for embed

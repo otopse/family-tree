@@ -9,12 +9,17 @@ require_once __DIR__ . '/_layout.php';
 
 // Debug log helper
 $debugLog = __DIR__ . '/gedcom_debug.log';
+
+// Initialize log file - clear it at the start of each edit-tree.php page load
+// This ensures we start with a fresh log for each editing session
+file_put_contents($debugLog, date('Y-m-d H:i:s') . " [edit-tree] === EDIT-TREE START (log initialized/cleared) ===\n");
+
 function debugLog(string $msg): void {
     global $debugLog;
     file_put_contents($debugLog, date('Y-m-d H:i:s') . " [edit-tree] " . $msg . "\n", FILE_APPEND);
 }
 
-debugLog("=== EDIT-TREE START ===");
+debugLog("Tree ID: " . ($_GET['id'] ?? '0') . ", Request time: " . date('Y-m-d H:i:s'));
 
 $user = require_login();
 $treeId = (int) ($_GET['id'] ?? 0);
