@@ -238,20 +238,19 @@ debugLog("About to render container-fluid. Auth-page should have padding: 0");
 debugLog("Current output buffer length: " . ob_get_length());
 ?><div class="container-fluid">
   <div class="editor-header">
-    <div style="display: flex; align-items: center; gap: 16px; width: 100%;">
+      <div style="display: flex; align-items: center; gap: 16px; width: 100%;">
       <a href="/family-trees.php" class="btn-secondary" style="padding: 6px 12px;">← Späť</a>
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
       
       <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+        <div class="search-box" style="display: inline-block;">
+          <input type="text" placeholder="Hľadať..." class="form-control" id="search-input" style="width: 150px; padding: 4px 8px;">
+        </div>
         <form method="post" action="/edit-tree.php?id=<?= $treeId ?>" style="margin: 0; display: inline-block;">
           <input type="hidden" name="action" value="add_record">
           <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
         </form>
-        <div class="search-box" style="display: inline-block;">
-          <input type="text" placeholder="Hľadať..." class="form-control" id="search-input" style="width: 150px; padding: 4px 8px;">
-        </div>
         <a href="/edit-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px; background-color: var(--primary-color); color: white; cursor: default; pointer-events: none; opacity: 0.8;">Editovať</a>
-        <a href="/view-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px;">Zobraziť</a>
         <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
     </div>
@@ -446,6 +445,7 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     border-right: 1px solid var(--border-color);
     background: #f8fafc;
     padding: 16px;
+    padding-bottom: 32px; /* Extra bottom padding to show last card fully */
     overflow-y: auto;
     overflow-x: hidden;
     height: 100%;
@@ -490,6 +490,8 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     display: flex;
     flex-direction: column;
     gap: 16px;
+    padding-bottom: 0; /* No extra padding, gap handles spacing */
+    min-height: fit-content; /* Ensure all cards are visible */
   }
 
   /* Adjust Record Card for smaller space */
@@ -509,7 +511,7 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     background: white;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 0; /* No margin, gap handles spacing */
     position: relative;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     display: flex;
