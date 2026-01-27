@@ -7,8 +7,18 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/_layout.php';
 
+// Debug log helper
+$debugLog = __DIR__ . '/gedcom_debug.log';
+function debugLog(string $msg): void {
+    global $debugLog;
+    file_put_contents($debugLog, date('Y-m-d H:i:s') . " [edit-tree] " . $msg . "\n", FILE_APPEND);
+}
+
+debugLog("=== EDIT-TREE START ===");
+
 $user = require_login();
 $treeId = (int) ($_GET['id'] ?? 0);
+debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null'));
 
 // Fetch tree and verify ownership
 $stmt = db()->prepare('SELECT * FROM family_trees WHERE id = :id AND owner = :owner');
@@ -128,10 +138,34 @@ try {
     usort($viewData, function($a, $b) {
       return $a['sort_year'] <=> $b['sort_year'];
     });
+    
+    // Log records with IDs and sequential numbers
+    debugLog("Records count: " . count($viewData));
+    $cardCounter = 1;
+    $personCounter = 1;
+    foreach ($viewData as $row) {
+      $recordId = $row['record_id'];
+      $manName = $row['man']['full_name'] ?? 'N/A';
+      $womanName = $row['woman']['full_name'] ?? 'N/A';
+      $childrenCount = count($row['children']);
+      
+      // Calculate person sequence numbers for this record
+      $manSeqNum = $row['man'] ? $personCounter++ : null;
+      $womanSeqNum = $row['woman'] ? $personCounter++ : null;
+      $childrenSeqNums = [];
+      foreach ($row['children'] as $child) {
+        $childrenSeqNums[] = $personCounter++;
+      }
+      
+      debugLog("Dlaždica [por.č.: $cardCounter, record_id: $recordId]: muž={$manName} (por.č. mien: " . ($manSeqNum ?? 'N/A') . "), žena={$womanName} (por.č. mien: " . ($womanSeqNum ?? 'N/A') . "), detí=$childrenCount (por.č. mien: " . implode(',', $childrenSeqNums) . ")");
+      $cardCounter++;
+    }
+    
+    debugLog("Total persons count: " . ($personCounter - 1));
   }
 
 } catch (PDOException $e) {
-  // Silent fail or log
+  debugLog("PDO Exception: " . $e->getMessage());
 }
 
 // ---------------------------------------------------------
@@ -201,8 +235,15 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     <div style="display: flex; align-items: center; gap: 16px;">
       <a href="/family-trees.php" class="btn-secondary" style="padding: 6px 12px;">← Späť</a>
       <h1 style="margin: 0; font-size: 1.5rem;"><?= e($tree['tree_name']) ?> <span style="font-weight: normal; font-size: 1rem; color: var(--text-secondary);">(Editor)</span></h1>
+      <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px; margin-left: auto;">Export PDF</button>
     </div>
   </div>
+  
+  <?php
+  debugLog("Editor header rendered. Export PDF button should be present.");
+  debugLog("Records processed: " . count($viewData));
+  debugLog("=== EDIT-TREE PHP DONE ===");
+  ?>
     
   <div class="split-view-container">
     <!-- Left: Record View (Masonry) -->
@@ -480,8 +521,133 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
+  
+  // Export PDF functionality for edit-tree.php
+  const exportPdfBtn = document.getElementById('export-pdf-btn');
+  console.log('[EDIT-TREE] Export PDF button found:', exportPdfBtn !== null);
+  
+  if (exportPdfBtn) {
+    console.log('[EDIT-TREE] Export PDF button exists, adding event listener');
+    exportPdfBtn.addEventListener('click', function() {
+      console.log('[EDIT-TREE] Export PDF button clicked');
+      
+      // Get the iframe with the tree view
+      const iframe = document.querySelector('#tree-view iframe');
+      if (!iframe) {
+        console.error('[EDIT-TREE] Tree view iframe not found');
+        alert('Graf nie je ešte načítaný.');
+        return;
+      }
+      
+      const btn = this;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Exportujem...';
+      
+      try {
+        // Access iframe content
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        const svg = iframeDoc.getElementById('tree-svg');
+        
+        if (!svg) {
+          console.error('[EDIT-TREE] SVG not found in iframe');
+          alert('Graf nie je ešte načítaný v iframe.');
+          btn.disabled = false;
+          btn.textContent = originalText;
+          return;
+        }
+        
+        console.log('[EDIT-TREE] SVG found, starting export');
+        
+        // Get SVG dimensions
+        const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
+        const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
+        
+        // Create canvas for conversion
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const scale = 2; // For better quality
+        canvas.width = svgWidth * scale;
+        canvas.height = svgHeight * scale;
+        
+        // Fill white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Convert SVG to image
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        
+        const img = new Image();
+        
+        img.onload = function() {
+          try {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Try to use jsPDF if available
+            if (typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF) {
+              const { jsPDF } = window.jspdf;
+              const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+              });
+              
+              pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+              pdf.save('rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.pdf');
+              console.log('[EDIT-TREE] PDF exported successfully');
+            } else {
+              console.log('[EDIT-TREE] jsPDF not available, falling back to PNG');
+              // Fallback: download as PNG
+              canvas.toBlob(function(blob) {
+                if (blob) {
+                  const downloadUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = downloadUrl;
+                  a.download = 'rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.png';
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(downloadUrl);
+                }
+              }, 'image/png');
+            }
+          } catch (e) {
+            console.error('[EDIT-TREE] Export error:', e);
+            alert('Chyba pri exporte: ' + e.message);
+          } finally {
+            URL.revokeObjectURL(url);
+            btn.disabled = false;
+            btn.textContent = originalText;
+          }
+        };
+        
+        img.onerror = function() {
+          console.error('[EDIT-TREE] Image load error');
+          alert('Chyba pri načítaní obrázka. Skúste použiť iný prehliadač.');
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = originalText;
+        };
+        
+        img.src = url;
+        
+      } catch (e) {
+        console.error('[EDIT-TREE] Export error:', e);
+        alert('Chyba pri exporte: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
+  } else {
+    console.error('[EDIT-TREE] Export PDF button NOT FOUND in DOM');
+  }
 });
 </script>
+
+<!-- Include jsPDF library for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <?php
 render_footer();
