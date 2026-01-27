@@ -303,8 +303,24 @@ if ($isEmbed) {
         </style>
     </head>
     <body>
-        <div id="tree-wrapper">
+        <div id="tree-wrapper" style="position: relative;">
             <div id="loading" style="padding: 20px;">Načítavam graf...</div>
+            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;">
+                <div style="margin-bottom: 12px;">
+                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong><br>
+                    <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong><br>
+                    <span style="font-size: 13px;"><?= e(date('d.m.Y', strtotime($tree['created']))) ?></span>
+                </div>
+                <div style="margin-bottom: 12px; text-align: center;">
+                    <div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div>
+                </div>
+                <div style="text-align: center; font-size: 10px; color: #999; margin-top: 8px;">
+                    © Family-tree.cz (<?= date('Y') ?>)
+                </div>
+            </div>
         </div>
         <!-- Hidden diagnostics for embed -->
         <div id="diagnostics" style="display:none;"></div>
@@ -347,8 +363,24 @@ if ($isEmbed) {
             </div>
         </div>
         
-        <div id="tree-wrapper">
+        <div id="tree-wrapper" style="position: relative;">
             <div id="loading" style="padding: 20px;">Načítavam graf...</div>
+            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;">
+                <div style="margin-bottom: 12px;">
+                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong><br>
+                    <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
+                </div>
+                <div style="margin-bottom: 12px;">
+                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong><br>
+                    <span style="font-size: 13px;"><?= e(date('d.m.Y', strtotime($tree['created']))) ?></span>
+                </div>
+                <div style="margin-bottom: 12px; text-align: center;">
+                    <div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div>
+                </div>
+                <div style="text-align: center; font-size: 10px; color: #999; margin-top: 8px;">
+                    © Family-tree.cz (<?= date('Y') ?>)
+                </div>
+            </div>
         </div>
         <div id="diagnostics" style="padding: 10px; border-top: 1px solid #ccc; background: #eee; height: 150px; overflow: auto; font-family: monospace; font-size: 12px;">
             <strong>Diagnostika:</strong><br>
@@ -883,6 +915,35 @@ debugLog("JavaScript script tag opened");
             }
             wrapper.appendChild(svg);
             debugLog("SVG appended successfully. Graph rendering complete!");
+            
+            // Position info panel at the same height as first graphical element
+            const infoPanel = document.getElementById('info-panel');
+            if (infoPanel && orderedIndividuals.length > 0) {
+                const firstInd = orderedIndividuals[0];
+                const firstY = getY(firstInd);
+                infoPanel.style.top = firstY + 'px';
+                infoPanel.style.display = 'block';
+                
+                // Generate QR code
+                const currentUrl = window.location.href;
+                const qrCodeDiv = document.getElementById('qrcode');
+                if (qrCodeDiv) {
+                    // Use QR code API
+                    const qrSize = 120;
+                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(currentUrl)}`;
+                    const img = document.createElement('img');
+                    img.src = qrApiUrl;
+                    img.alt = 'QR Code';
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.display = 'block';
+                    img.onerror = function() {
+                        // Fallback if QR API fails
+                        qrCodeDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 11px;">QR kód<br>nedostupný</div>';
+                    };
+                    qrCodeDiv.appendChild(img);
+                }
+            }
         } catch (e) {
             debugLog("CRITICAL ERROR appending SVG: " + e.message, e.stack);
             if (loading) {

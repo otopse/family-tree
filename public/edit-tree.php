@@ -250,7 +250,7 @@ debugLog("Current output buffer length: " . ob_get_length());
           <input type="hidden" name="action" value="add_record">
           <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
         </form>
-        <a href="/edit-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px; background-color: var(--primary-color); color: white; cursor: default; pointer-events: none; opacity: 0.8;">Editovať</a>
+        <a href="/edit-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px; font-size: 0.9rem; background-color: var(--primary-color); color: white; cursor: default; pointer-events: none; opacity: 0.8;">Editovať</a>
         <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
     </div>
@@ -489,7 +489,7 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
   .masonry-grid-single-col {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 8px; /* Reduced from 16px to 8px */
     padding-bottom: 0; /* No extra padding, gap handles spacing */
     min-height: fit-content; /* Ensure all cards are visible */
   }
@@ -517,35 +517,36 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-bottom: 4px; /* Slight padding at bottom */
+    padding-bottom: 2px; /* Reduced from 4px to 2px */
   }
 
   .record-id {
     position: absolute;
-    bottom: 0;
+    top: 0;
     right: 0;
-    top: auto;
+    bottom: auto;
     left: auto;
     background: #000;
     color: #fff;
     padding: 1px 6px;
-    font-size: 13px;
+    font-size: 11px; /* Slightly smaller */
     font-weight: bold;
-    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px; /* Changed from border-top-left-radius */
     z-index: 10;
     line-height: 1.2;
   }
 
   .record-row {
-    padding: 1px 8px; /* Very compact padding */
+    padding: 0px 8px; /* Reduced from 1px to 0px */
     display: flex;
     align-items: center;
-    font-size: 13px;
-    line-height: 1.3;
+    font-size: 12px; /* Reduced from 13px */
+    line-height: 1.2; /* Reduced from 1.3 */
+    min-height: 20px; /* Reduced height */
   }
 
   .father-row {
-    padding-top: 6px; /* A bit more top padding for the first element */
+    padding-top: 4px; /* Reduced from 6px */
     background-color: white;
   }
   
@@ -558,20 +559,21 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     flex-direction: column;
     background-color: #fff;
     padding: 0;
-    margin-top: 2px;
+    margin-top: 1px; /* Reduced from 2px */
   }
   
   .child-row {
-    padding: 1px 8px;
-    font-size: 13px;
+    padding: 0px 8px; /* Reduced from 1px to 0px */
+    font-size: 12px; /* Reduced from 13px */
     color: #4b5563;
-    line-height: 1.3;
+    line-height: 1.2; /* Reduced from 1.3 */
+    min-height: 20px; /* Reduced height */
   }
 
   .empty-placeholder {
     display: inline-block;
     width: 100%;
-    min-height: 18px; /* Height of one text line */
+    min-height: 20px; /* Reduced from 18px to match row height */
   }
 
   .person-name {
@@ -584,24 +586,24 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
   .seq-badge {
     background-color: #10b981;
     color: white;
-    padding: 1px 4px;
+    padding: 0px 3px; /* Reduced from 1px 4px */
     border-radius: 3px;
-    font-size: 10px;
-    margin-right: 4px;
+    font-size: 9px; /* Reduced from 10px */
+    margin-right: 3px; /* Reduced from 4px */
     vertical-align: middle;
     font-weight: bold;
-    min-width: 18px;
+    min-width: 16px; /* Reduced from 18px */
     display: inline-block;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.1; /* Reduced from 1.2 */
   }
   
   .person-name {
     transition: background-color 0.2s;
     display: inline-block;
-    padding: 2px 4px;
+    padding: 1px 4px; /* Reduced from 2px to 1px */
     border-radius: 4px;
-    margin: 1px 0;
+    margin: 0px 0; /* Reduced from 1px to 0px */
   }
   
   .person-name:hover {

@@ -27,7 +27,10 @@ $user = current_user();
       <div class="nav-auth">
         <?php if ($user): ?>
           <div class="nav-user">
-            <button type="button" class="nav-user-toggle"><?= e($user['username'] ?? $user['email']) ?></button>
+            <button type="button" class="nav-user-toggle">
+              <?= e($user['username'] ?? $user['email']) ?>
+              <span style="margin-left: 8px; font-size: 0.85em; opacity: 0.8;">Free</span>
+            </button>
             <div class="nav-user-menu">
               <a href="/account.php">Môj účet</a>
               <a href="/family-trees.php">Moje rodokmene</a>
