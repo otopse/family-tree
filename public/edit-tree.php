@@ -137,7 +137,7 @@ try {
 // ---------------------------------------------------------
 // HELPER FOR VIEW
 // ---------------------------------------------------------
-function render_person_html(?array $el): string {
+function render_person_html(?array $el, int $seqNum): string {
   if (!$el) {
     return '<span class="empty-placeholder">&nbsp;</span>';
   }
@@ -151,21 +151,15 @@ function render_person_html(?array $el): string {
   
   if (strpos($birthDate, '[') === 0 && substr($birthDate, -1) === ']') {
       $isFictional = true;
-      // Keep the brackets? Or strip them and re-add them via formatting?
-      // Since it's stored as [1850], we can just display it as is.
-      // But we need to handle the display logic for death dates too.
-      $birthDate = substr($birthDate, 1, -1); // Strip for formatting if needed, but wait...
+      $birthDate = substr($birthDate, 1, -1);
   }
 
   // Helper to format a single date string safely
   $formatDate = function($val) {
     if (empty($val)) return '';
     $val = trim($val);
-    $origVal = $val;
     
-    // Check fictional inside formatter? 
-    // If it comes from DB as [1850], lets treat it carefully.
-    if (strpos($val, '[') === 0) return $val; // Return as is if already formatted with brackets
+    if (strpos($val, '[') === 0) return $val;
 
     if (preg_match('/^\d{4}$/', $val)) {
       return $val;
@@ -184,10 +178,8 @@ function render_person_html(?array $el): string {
 
   if ($birthStr) {
       if ($isFictional) {
-          // It's already [YYYY] from DB, so $birthStr is [YYYY]
           $dateStr = $birthStr; 
       } else {
-          // Real
           if ($deathStr) {
               $dateStr = "({$birthStr} - {$deathStr})";
           } else {
@@ -198,7 +190,7 @@ function render_person_html(?array $el): string {
       $dateStr = "(? - {$deathStr})";
   }
 
-  return '<span class="person-name">' . $name . ' ' . $dateStr . ' <span class="id-badge-inline">' . $el['id'] . '</span></span>';
+  return '<span class="person-name"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . ' <span class="id-badge-inline">' . $el['id'] . '</span></span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -230,14 +222,14 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
             <p>Žiadne záznamy.</p>
           </div>
         <?php else: ?>
-          <?php $counter = 1; ?>
+          <?php $cardCounter = 1; $personCounter = 1; ?>
           <?php foreach ($viewData as $row): ?>
             <div class="record-card">
-              <div class="record-id">#<?= $counter++ ?></div>
+              <div class="record-id">#<?= $cardCounter++ ?></div>
               
               <div class="record-row father-row">
                 <?php if ($row['man']): ?>
-                  <?= render_person_html($row['man']) ?>
+                  <?= render_person_html($row['man'], $personCounter++) ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
                 <?php endif; ?>
@@ -245,7 +237,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
 
               <div class="record-row mother-row">
                 <?php if ($row['woman']): ?>
-                  <?= render_person_html($row['woman']) ?>
+                  <?= render_person_html($row['woman'], $personCounter++) ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
                 <?php endif; ?>
@@ -254,7 +246,7 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
               <div class="children-list">
                 <?php foreach ($row['children'] as $child): ?>
                   <div class="child-row">
-                    <?= render_person_html($child) ?>
+                    <?= render_person_html($child, $personCounter++) ?>
                   </div>
                 <?php endforeach; ?>
               </div>
@@ -312,6 +304,27 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     border-right: 1px solid var(--border-color);
     background: #f8fafc;
     padding: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Custom scrollbar styling */
+  .left-pane::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .left-pane::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 4px;
+  }
+
+  .left-pane::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+  }
+
+  .left-pane::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
   }
 
   .right-pane {
@@ -423,6 +436,20 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     margin-right: 4px;
     vertical-align: middle;
     font-weight: bold;
+  }
+
+  .seq-badge {
+    background-color: #10b981;
+    color: white;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-right: 4px;
+    vertical-align: middle;
+    font-weight: bold;
+    min-width: 20px;
+    display: inline-block;
+    text-align: center;
   }
 
   .tree-canvas-placeholder {
