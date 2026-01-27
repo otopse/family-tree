@@ -226,12 +226,30 @@ debugLog("Individuals count: " . count($individuals));
 debugLog("Families count: " . count($families));
 debugLog("Clean families count: " . count($cleanFamilies));
 
-// Log first few individuals for debugging
-$i = 0;
+// Log individuals with record IDs and seqNum for debugging
+$recordCounter = 1;
+$recordSeqMap = []; // Map record_id to sequential number in display
+foreach ($sortedRecordIds as $recordId) {
+    $recordSeqMap[$recordId] = $recordCounter++;
+}
+
 foreach ($individuals as $key => $ind) {
-    if ($i++ < 5) {
-        debugLog("Individual [$key]: seqNum={$ind['seqNum']}, name={$ind['name']}, birthYear={$ind['birthYear']}");
-    }
+    $recordIdsStr = implode(',', $ind['recordIds']);
+    $recordSeqNums = array_map(function($rid) use ($recordSeqMap) {
+        return $recordSeqMap[$rid] ?? '?';
+    }, $ind['recordIds']);
+    $recordSeqStr = implode(',', $recordSeqNums);
+    debugLog("Individual [ID: $key, por.č. mien: {$ind['seqNum']}, record_ids: [$recordIdsStr], por.č. dlaždíc: [$recordSeqStr]]: name={$ind['name']}, birthYear={$ind['birthYear']}");
+}
+
+// Also log records (dlaždice) with their sequential numbers
+foreach ($sortedRecordIds as $idx => $recordId) {
+    $rec = $recordElements[$recordId];
+    $recordSeqNum = $recordSeqMap[$recordId] ?? ($idx + 1);
+    $manName = $rec['man']['full_name'] ?? 'N/A';
+    $womanName = $rec['woman']['full_name'] ?? 'N/A';
+    $childrenCount = count($rec['children']);
+    debugLog("Dlaždica [por.č.: $recordSeqNum, record_id: $recordId]: muž=$manName, žena=$womanName, detí=$childrenCount");
 }
 
 // Log JSON encode test
@@ -316,6 +334,7 @@ if ($isEmbed) {
             <h4 class="m-0"><?= e($tree['tree_name']) ?></h4>
             <div>
                 <a href="/family-trees.php" class="btn btn-sm btn-outline-secondary">Späť</a>
+                <button id="export-pdf-btn" class="btn btn-sm btn-primary" style="margin-left: 8px;">Export PDF</button>
             </div>
         </div>
         
@@ -646,14 +665,15 @@ debugLog("JavaScript script tag opened");
                 gridGroup.appendChild(line);
                 gridLines++;
 
-                if (y % 50 === 0) {
-                    const text = document.createElementNS(ns, "text");
-                    text.setAttribute("x", x + 5);
-                    text.setAttribute("y", 20);
-                    text.setAttribute("class", "grid-text");
-                    text.textContent = y;
-                    gridGroup.appendChild(text);
-                }
+            if (y % 50 === 0) {
+                const text = document.createElementNS(ns, "text");
+                text.setAttribute("x", x + 5);
+                text.setAttribute("y", 20);
+                text.setAttribute("class", "grid-text");
+                text.setAttribute("font-size", "14px");
+                text.textContent = y;
+                gridGroup.appendChild(text);
+            }
             }
             svg.appendChild(gridGroup);
             debugLog(`Grid created with ${gridLines} lines`);
@@ -796,6 +816,7 @@ debugLog("JavaScript script tag opened");
                 idText.setAttribute("x", 3 + badgeWidth / 2);
                 idText.setAttribute("y", CONFIG.boxHeight / 2);
                 idText.setAttribute("class", "id-text");
+                idText.setAttribute("font-size", "11px");
                 idText.textContent = ind.displayId || idx + 1;
                 g.appendChild(idText);
 
@@ -804,6 +825,7 @@ debugLog("JavaScript script tag opened");
                 text.setAttribute("x", badgeWidth + badgeMargin + 6);
                 text.setAttribute("y", CONFIG.boxHeight / 2);
                 text.setAttribute("class", "person-text");
+                text.setAttribute("font-size", "14px");
                 text.setAttribute("dominant-baseline", "central");
                 text.textContent = ind.displayText || ind.name || 'Neznámy';
                 g.appendChild(text);
@@ -850,7 +872,103 @@ debugLog("JavaScript script tag opened");
     
     // Log that script finished loading
     debugLog("=== JavaScript script fully loaded ===");
+    
+    // PDF Export functionality
+    document.getElementById('export-pdf-btn')?.addEventListener('click', function() {
+        const svg = document.getElementById('tree-svg');
+        if (!svg) {
+            alert('Graf nie je ešte načítaný.');
+            return;
+        }
+        
+        const btn = this;
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Exportujem...';
+        
+        try {
+            // Get SVG dimensions
+            const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
+            const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
+            
+            // Create canvas for conversion
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const scale = 2; // For better quality
+            canvas.width = svgWidth * scale;
+            canvas.height = svgHeight * scale;
+            
+            // Fill white background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Convert SVG to image
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+            
+            const img = new Image();
+            
+            img.onload = function() {
+                try {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    // Try to use jsPDF if available
+                    if (typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF) {
+                        const { jsPDF } = window.jspdf;
+                        const pdf = new jsPDF({
+                            orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                            unit: 'px',
+                            format: [canvas.width, canvas.height]
+                        });
+                        
+                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+                        pdf.save('rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.pdf');
+                    } else {
+                        // Fallback: download as PNG
+                        canvas.toBlob(function(blob) {
+                            if (blob) {
+                                const downloadUrl = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = downloadUrl;
+                                a.download = 'rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(downloadUrl);
+                            }
+                        }, 'image/png');
+                    }
+                } catch (e) {
+                    console.error('Export error:', e);
+                    alert('Chyba pri exporte: ' + e.message);
+                } finally {
+                    URL.revokeObjectURL(url);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            };
+            
+            img.onerror = function() {
+                alert('Chyba pri načítaní obrázka. Skúste použiť iný prehliadač.');
+                URL.revokeObjectURL(url);
+                btn.disabled = false;
+                btn.textContent = originalText;
+            };
+            
+            img.src = url;
+            
+        } catch (e) {
+            console.error('Export error:', e);
+            alert('Chyba pri exporte: ' + e.message);
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    });
 </script>
+
+<!-- Include jsPDF library for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <?php
 // Log after script closes
