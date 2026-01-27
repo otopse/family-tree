@@ -40,50 +40,148 @@ $parentMap = [];
 // Helper to extract year
 function extractYear(?string $date): ?int {
     if (!$date) return null;
+    // Remove brackets for fictional dates
+    $date = str_replace(['[', ']'], '', $date);
     if (preg_match('/(\d{4})/', $date, $matches)) {
         return (int)$matches[1];
     }
     return null;
 }
 
+// Helper to format date for display (same as edit-tree.php)
+function formatDateForDisplay(?string $val): string {
+    if (empty($val)) return '';
+    $val = trim($val);
+    
+    // If it's a fictional date in brackets, return as is
+    if (strpos($val, '[') === 0) return $val;
+
+    if (preg_match('/^\d{4}$/', $val)) {
+        return $val;
+    }
+    $ts = strtotime($val);
+    if (!$ts) return $val;
+    return date('Y.m.d', $ts);
+}
+
+// First pass: collect all elements by record, maintaining order
+$recordElements = [];
 foreach ($rows as $row) {
     $famId = $row['record_id'];
+    if (!isset($recordElements[$famId])) {
+        $recordElements[$famId] = ['man' => null, 'woman' => null, 'children' => []];
+    }
     
-    // Process Individual
-    if ($row['gedcom_id']) {
-        if (!isset($individuals[$row['gedcom_id']])) {
-            $bYear = extractYear($row['birth_date']);
-            $dYear = extractYear($row['death_date']);
-    
-            // Fix: Ignore death date if it matches today (default value error)
-            if ($row['death_date'] === date('Y-m-d')) {
-                 $dYear = null;
-                 $row['death_date'] = null;
-            }
-            
-            // Sanity check/Defaults
-            if (!$bYear && $dYear) $bYear = $dYear - 60;
-            if (!$bYear) $bYear = 1900; // Fallback
-            if (!$dYear) $dYear = $bYear + 70; // Assumed lifespan if unknown
-            
-            $individuals[$row['gedcom_id']] = [
-                'id' => $row['gedcom_id'],
-                'name' => $row['full_name'],
-                'gender' => $row['gender'],
-                'birthYear' => $bYear,
-                'deathYear' => $dYear,
-                'birthDate' => $row['birth_date'],
-                'deathDate' => $row['death_date'],
-                'birthPlace' => $row['birth_place'],
-                'deathPlace' => $row['death_place'],
-                'recordIds' => [] // Initialize array for related records
-            ];
-        }
+    if ($row['type'] === 'MUZ') {
+        $recordElements[$famId]['man'] = $row;
+    } elseif ($row['type'] === 'ZENA') {
+        $recordElements[$famId]['woman'] = $row;
+    } elseif ($row['type'] === 'DIETA') {
+        $recordElements[$famId]['children'][] = $row;
+    }
+}
 
-        // Add this record ID to the individual's list
-        if (!in_array($famId, $individuals[$row['gedcom_id']]['recordIds'])) {
-            $individuals[$row['gedcom_id']]['recordIds'][] = $famId;
+// Sort records by man's birth year (same as edit-tree.php)
+$sortedRecordIds = array_keys($recordElements);
+usort($sortedRecordIds, function($a, $b) use ($recordElements) {
+    $manA = $recordElements[$a]['man'];
+    $manB = $recordElements[$b]['man'];
+    $womanA = $recordElements[$a]['woman'];
+    $womanB = $recordElements[$b]['woman'];
+    
+    $yearA = $manA ? extractYear($manA['birth_date']) : ($womanA ? extractYear($womanA['birth_date']) : 9999);
+    $yearB = $manB ? extractYear($manB['birth_date']) : ($womanB ? extractYear($womanB['birth_date']) : 9999);
+    
+    return ($yearA ?? 9999) <=> ($yearB ?? 9999);
+});
+
+// Build ordered list of all persons with sequential numbers
+$orderedPersons = [];
+$seqNum = 1;
+
+foreach ($sortedRecordIds as $recordId) {
+    $rec = $recordElements[$recordId];
+    
+    if ($rec['man']) {
+        $rec['man']['seqNum'] = $seqNum++;
+        $orderedPersons[] = $rec['man'];
+    }
+    if ($rec['woman']) {
+        $rec['woman']['seqNum'] = $seqNum++;
+        $orderedPersons[] = $rec['woman'];
+    }
+    foreach ($rec['children'] as $child) {
+        $child['seqNum'] = $seqNum++;
+        $orderedPersons[] = $child;
+    }
+}
+
+// Now build individuals and families from ordered persons
+foreach ($orderedPersons as $row) {
+    $famId = $row['record_id'];
+    
+    // Process Individual - use element_id as unique key if no gedcom_id
+    $personKey = $row['gedcom_id'] ?: 'el_' . $row['element_id'];
+    
+    if (!isset($individuals[$personKey])) {
+        $bYear = extractYear($row['birth_date']);
+        $dYear = extractYear($row['death_date']);
+
+        // Fix: Ignore death date if it matches today (default value error)
+        if ($row['death_date'] === date('Y-m-d')) {
+             $dYear = null;
+             $row['death_date'] = null;
         }
+        
+        // Check if birth date is fictional
+        $isFictional = strpos($row['birth_date'] ?? '', '[') === 0;
+        
+        // Sanity check/Defaults for display
+        if (!$bYear && $dYear) $bYear = $dYear - 60;
+        if (!$bYear) $bYear = 1900; // Fallback
+        if (!$dYear) $dYear = $bYear + 70; // Assumed lifespan if unknown
+        
+        // Format display text to match edit-tree.php
+        $birthStr = formatDateForDisplay($row['birth_date']);
+        $deathStr = '';
+        if (!empty($row['death_date']) && $row['death_date'] !== date('Y-m-d')) {
+            $deathStr = formatDateForDisplay($row['death_date']);
+        }
+        
+        $dateStr = '';
+        if ($birthStr) {
+            if ($isFictional) {
+                $dateStr = $birthStr;
+            } else {
+                if ($deathStr) {
+                    $dateStr = "({$birthStr} - {$deathStr})";
+                } else {
+                    $dateStr = "({$birthStr})";
+                }
+            }
+        } elseif ($deathStr) {
+            $dateStr = "(? - {$deathStr})";
+        }
+        
+        $individuals[$personKey] = [
+            'id' => $personKey,
+            'name' => $row['full_name'],
+            'gender' => $row['gender'],
+            'birthYear' => $bYear,
+            'deathYear' => $dYear,
+            'birthDate' => $row['birth_date'],
+            'deathDate' => $row['death_date'],
+            'birthPlace' => $row['birth_place'],
+            'deathPlace' => $row['death_place'],
+            'seqNum' => $row['seqNum'],
+            'dateStr' => $dateStr,
+            'recordIds' => []
+        ];
+    }
+
+    // Add this record ID to the individual's list
+    if (!in_array($famId, $individuals[$personKey]['recordIds'])) {
+        $individuals[$personKey]['recordIds'][] = $famId;
     }
 
     // Build Family links
@@ -92,14 +190,12 @@ foreach ($rows as $row) {
     }
 
     if ($row['type'] === 'MUZ') {
-        $families[$famId]['husb'] = $row['gedcom_id'];
+        $families[$famId]['husb'] = $personKey;
     } elseif ($row['type'] === 'ZENA') {
-        $families[$famId]['wife'] = $row['gedcom_id'];
+        $families[$famId]['wife'] = $personKey;
     } elseif ($row['type'] === 'DIETA') {
-        $families[$famId]['children'][] = $row['gedcom_id'];
-        if ($row['gedcom_id']) {
-            $parentMap[$row['gedcom_id']] = $famId;
-        }
+        $families[$famId]['children'][] = $personKey;
+        $parentMap[$personKey] = $famId;
     }
 }
 
@@ -137,7 +233,7 @@ if ($isEmbed) {
             .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
             .child-line { stroke: #1890ff; }
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
-            .id-badge { fill: #007bff; }
+            .id-badge { fill: #10b981; }
             .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
             .grid-line { stroke: #eee; stroke-width: 1; }
@@ -172,7 +268,7 @@ if ($isEmbed) {
             .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
             .child-line { stroke: #1890ff; }
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
-            .id-badge { fill: #007bff; }
+            .id-badge { fill: #10b981; }
             .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
             .grid-line { stroke: #eee; stroke-width: 1; }
@@ -260,74 +356,24 @@ if ($isEmbed) {
         CONFIG.minYear = Math.floor(minDataYear / 10) * 10 - 20;
         CONFIG.maxYear = Math.ceil(maxDataYear / 10) * 10 + 50;
 
-        // Calculate Widths
+        // Calculate Widths - use same format as edit-tree.php
+        const badgeWidth = 22;
+        const badgeMargin = 4;
+        
         individuals.forEach(ind => {
-            let dateStr = "";
-            if (ind.birthYear) {
-                dateStr = `${ind.birthYear}`;
-                if (ind.deathYear) {
-                    dateStr += ` - ${ind.deathYear}`;
-                }
-            }
-            const displayText = `${ind.name} (${dateStr})`;
+            // Use pre-formatted dateStr from PHP
+            const displayText = `${ind.name} ${ind.dateStr || ''}`.trim();
             ind.displayText = displayText;
             
-            // Use displayId (gedcom_id) if available, or just id
-            ind.displayId = ind.id.replace(/@/g, ''); 
+            // Use sequential number as displayId
+            ind.displayId = ind.seqNum;
             
-            ind.width = (displayText.length * CONFIG.charWidth) + CONFIG.basePadding + 20;
+            // Width = badge + margin + text + padding
+            ind.width = badgeWidth + badgeMargin + (displayText.length * CONFIG.charWidth) + CONFIG.basePadding;
         });
 
-        // 2. Vertical Layout (Ordering)
-        const visited = new Set();
-        const orderedIndividuals = [];
-
-        // Infer roots
-        const allChildren = new Set();
-        families.forEach(f => {
-            if (f.children) f.children.forEach(c => allChildren.add(c));
-        });
-
-        const roots = individuals.filter(i => !allChildren.has(i.id));
-        roots.sort((a, b) => a.birthYear - b.birthYear);
-        
-        function traverse(indId) {
-            if (visited.has(indId)) return;
-            visited.add(indId);
-            
-            const ind = indMap[indId];
-            if (!ind) return;
-            
-            orderedIndividuals.push(ind);
-
-            // Spouses
-            const myFamilies = families.filter(f => f.husb === indId || f.wife === indId);
-            myFamilies.forEach(fam => {
-                const spouseId = (fam.husb === indId) ? fam.wife : fam.husb;
-                if (spouseId && !visited.has(spouseId)) {
-                    traverse(spouseId);
-                }
-            });
-
-            // Children
-            myFamilies.forEach(fam => {
-                if (fam.children) {
-                    const kids = fam.children
-                        .map(id => indMap[id])
-                        .filter(k => k)
-                        .sort((a, b) => a.birthYear - b.birthYear);
-                        
-                    kids.forEach(kid => {
-                        traverse(kid.id);
-                    });
-                }
-            });
-        }
-
-        roots.forEach(root => traverse(root.id));
-        individuals.forEach(ind => {
-            if (!visited.has(ind.id)) traverse(ind.id);
-        });
+        // 2. Vertical Layout (Ordering) - use seqNum from PHP (same as edit-tree.php tiles)
+        const orderedIndividuals = [...individuals].sort((a, b) => a.seqNum - b.seqNum);
 
         orderedIndividuals.forEach((ind, idx) => {
             ind.rowIndex = idx;
@@ -427,6 +473,10 @@ if ($isEmbed) {
 
         // Boxes
         const boxesGroup = document.createElementNS(ns, "g");
+        const badgeWidth = 22;
+        const badgeHeight = 16;
+        const badgeMargin = 4;
+        
         orderedIndividuals.forEach(ind => {
             const g = document.createElementNS(ns, "g");
             g.setAttribute("class", "person-box");
@@ -439,24 +489,26 @@ if ($isEmbed) {
             rect.setAttribute("class", `person-rect ${ind.gender === 'M' ? 'male' : 'female'}`);
             g.appendChild(rect);
 
-            const badgeSize = 14;
+            // Badge on the left (like in tiles)
             const badge = document.createElementNS(ns, "rect");
-            badge.setAttribute("x", ind.width - badgeSize);
-            badge.setAttribute("y", 0);
-            badge.setAttribute("width", badgeSize);
-            badge.setAttribute("height", badgeSize);
+            badge.setAttribute("x", 3);
+            badge.setAttribute("y", (CONFIG.boxHeight - badgeHeight) / 2);
+            badge.setAttribute("width", badgeWidth);
+            badge.setAttribute("height", badgeHeight);
+            badge.setAttribute("rx", 3);
             badge.setAttribute("class", "id-badge");
             g.appendChild(badge);
 
             const idText = document.createElementNS(ns, "text");
-            idText.setAttribute("x", ind.width - (badgeSize/2));
-            idText.setAttribute("y", badgeSize/2);
+            idText.setAttribute("x", 3 + badgeWidth / 2);
+            idText.setAttribute("y", CONFIG.boxHeight / 2);
             idText.setAttribute("class", "id-text");
             idText.textContent = ind.displayId;
             g.appendChild(idText);
 
+            // Name text after badge
             const text = document.createElementNS(ns, "text");
-            text.setAttribute("x", 5);
+            text.setAttribute("x", badgeWidth + badgeMargin + 6);
             text.setAttribute("y", CONFIG.boxHeight / 2);
             text.setAttribute("class", "person-text");
             text.setAttribute("dominant-baseline", "central");
