@@ -224,7 +224,7 @@ function render_person_html(?array $el, int $seqNum): string {
       $dateStr = "(? - {$deathStr})";
   }
 
-  return '<span class="person-name"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . '</span>';
+  return '<span class="person-name" data-seqnum="' . $seqNum . '" data-element-id="' . ($el['id'] ?? '') . '"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . '</span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -481,6 +481,29 @@ render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
     display: inline-block;
     text-align: center;
   }
+  
+  .person-name {
+    transition: background-color 0.2s;
+    display: inline-block;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin: 1px 0;
+  }
+  
+  .person-name:hover {
+    background-color: #f0f0f0;
+  }
+  
+  .person-name.selected {
+    background-color: #ffffb8;
+    box-shadow: 0 0 0 2px #1890ff;
+  }
+  
+  .record-card.selected {
+    box-shadow: 0 0 0 3px #1890ff;
+    transition: box-shadow 0.2s;
+    border-color: #1890ff;
+  }
 
   .tree-canvas-placeholder {
     background: var(--bg-secondary);
@@ -521,6 +544,152 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
   });
+  
+  // Synchronization between tiles and graph
+  const iframe = document.querySelector('#tree-view iframe');
+  
+  // Function to highlight person in tiles
+  function highlightPersonInTiles(seqNum) {
+    // Remove previous selection
+    document.querySelectorAll('.person-name.selected').forEach(el => {
+      el.classList.remove('selected');
+    });
+    document.querySelectorAll('.record-card.selected').forEach(el => {
+      el.classList.remove('selected');
+    });
+    
+    // Find and highlight the person
+    const personElement = document.querySelector(`.person-name[data-seqnum="${seqNum}"]`);
+    if (personElement) {
+      personElement.classList.add('selected');
+      
+      // Scroll to the element in the left pane
+      const leftPane = document.querySelector('.left-pane');
+      if (leftPane) {
+        const elementTop = personElement.getBoundingClientRect().top;
+        const paneTop = leftPane.getBoundingClientRect().top;
+        const scrollTop = leftPane.scrollTop;
+        const targetScroll = scrollTop + (elementTop - paneTop) - (leftPane.clientHeight / 2);
+        
+        leftPane.scrollTo({
+          top: Math.max(0, targetScroll),
+          behavior: 'smooth'
+        });
+      }
+      
+      // Also highlight the parent record card
+      const recordCard = personElement.closest('.record-card');
+      if (recordCard) {
+        recordCard.classList.add('selected');
+        setTimeout(() => {
+          recordCard.classList.remove('selected');
+        }, 2000);
+      }
+    }
+  }
+  
+  // Function to highlight person in graph (iframe)
+  function highlightPersonInGraph(seqNum) {
+    if (!iframe) return;
+    
+    // Wait for iframe to be ready
+    const tryHighlight = () => {
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        if (!iframeDoc || !iframeDoc.getElementById('tree-svg')) {
+          // Iframe not ready yet, try again
+          setTimeout(tryHighlight, 100);
+          return;
+        }
+        
+        const personBox = iframeDoc.querySelector(`.person-box[data-seqnum="${seqNum}"]`);
+        
+        if (personBox) {
+          // Remove previous selection
+          iframeDoc.querySelectorAll('.person-box.selected').forEach(el => {
+            el.classList.remove('selected');
+          });
+          
+          // Add selection
+          personBox.classList.add('selected');
+          
+          // Scroll to the element in iframe
+          const svg = iframeDoc.getElementById('tree-svg');
+          const wrapper = iframeDoc.getElementById('tree-wrapper');
+          
+          if (svg && wrapper) {
+            const transform = personBox.getAttribute('transform');
+            const match = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+            if (match) {
+              const x = parseFloat(match[1]);
+              const y = parseFloat(match[2]);
+              
+              // Get box height for centering
+              const boxHeight = 30; // CONFIG.boxHeight
+              
+              // Calculate scroll position - center the element
+              const scrollX = x - (wrapper.clientWidth / 2);
+              const scrollY = y - (wrapper.clientHeight / 2) + (boxHeight / 2);
+              
+              wrapper.scrollTo({
+                left: Math.max(0, scrollX),
+                top: Math.max(0, scrollY),
+                behavior: 'smooth'
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[EDIT-TREE] Error highlighting in graph:', e);
+      }
+    };
+    
+    tryHighlight();
+  }
+  
+  // Listen for messages from iframe (graph clicks)
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'selectPerson') {
+      const seqNum = event.data.seqNum;
+      console.log('[EDIT-TREE] Received selectPerson message, seqNum:', seqNum);
+      highlightPersonInTiles(seqNum);
+    }
+  });
+  
+  // Add click handlers to person names in tiles using event delegation
+  const recordView = document.getElementById('record-view');
+  if (recordView) {
+    recordView.addEventListener('click', function(e) {
+      const personName = e.target.closest('.person-name');
+      if (personName) {
+        const seqNum = parseInt(personName.getAttribute('data-seqnum'));
+        if (seqNum) {
+          console.log('[EDIT-TREE] Person clicked in tile, seqNum:', seqNum);
+          highlightPersonInTiles(seqNum);
+          highlightPersonInGraph(seqNum);
+        }
+      }
+    });
+    
+    // Set cursor for all person names
+    document.querySelectorAll('.person-name').forEach(personName => {
+      personName.style.cursor = 'pointer';
+    });
+  }
+  
+  // Wait for iframe to load and initialize synchronization
+  if (iframe) {
+    iframe.addEventListener('load', function() {
+      console.log('[EDIT-TREE] Iframe loaded, synchronization ready');
+      
+      // Update cursor for person names (event delegation already handles clicks)
+      setTimeout(() => {
+        document.querySelectorAll('.person-name').forEach(personName => {
+          personName.style.cursor = 'pointer';
+        });
+      }, 500);
+    });
+  }
   
   // Export PDF functionality for edit-tree.php
   const exportPdfBtn = document.getElementById('export-pdf-btn');

@@ -287,6 +287,7 @@ if ($isEmbed) {
             .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
             .child-line { stroke: #1890ff; }
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
+            .person-box.selected .person-rect { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .id-badge { fill: #10b981; }
             .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
@@ -322,6 +323,7 @@ if ($isEmbed) {
             .spouse-line { stroke: #f5222d; stroke-dasharray: 4; }
             .child-line { stroke: #1890ff; }
             .person-rect.selected { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
+            .person-box.selected .person-rect { stroke: #1890ff; stroke-width: 3; fill: #ffffb8 !important; }
             .id-badge { fill: #10b981; }
             .id-text { fill: white; font-size: 9px; font-family: monospace; font-weight: bold; text-anchor: middle; dominant-baseline: central; }
             .connection-line { fill: none; stroke: #1890ff; stroke-width: 1.5; stroke-opacity: 0.4; }
@@ -790,10 +792,37 @@ debugLog("JavaScript script tag opened");
             try {
                 const g = document.createElementNS(ns, "g");
                 g.setAttribute("class", "person-box");
+                g.setAttribute("data-seqnum", ind.seqNum || (idx + 1));
+                g.style.cursor = "pointer";
                 
                 const x = getX(ind.birthYear);
                 const y = getY(ind);
                 g.setAttribute("transform", `translate(${x}, ${y})`);
+                
+                // Add click handler for synchronization
+                g.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const seqNum = this.getAttribute('data-seqnum');
+                    
+                    // Remove previous selection
+                    const svg = this.closest('svg');
+                    if (svg) {
+                        svg.querySelectorAll('.person-box.selected').forEach(el => {
+                            el.classList.remove('selected');
+                        });
+                    }
+                    
+                    // Add selection
+                    this.classList.add('selected');
+                    
+                    if (window.parent !== window) {
+                        // We're in an iframe, send message to parent
+                        window.parent.postMessage({
+                            type: 'selectPerson',
+                            seqNum: parseInt(seqNum)
+                        }, '*');
+                    }
+                });
                 
                 const rect = document.createElementNS(ns, "rect");
                 rect.setAttribute("width", ind.width || 100);
