@@ -198,7 +198,7 @@ function render_person_html(?array $el): string {
       $dateStr = "(? - {$deathStr})";
   }
 
-  return '<span class="person-name">' . $name . ' <span class="id-badge-inline">' . $el['id'] . '</span> ' . $dateStr . '</span>';
+  return '<span class="person-name">' . $name . ' ' . $dateStr . ' <span class="id-badge-inline">' . $el['id'] . '</span></span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
