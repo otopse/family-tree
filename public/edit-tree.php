@@ -271,10 +271,7 @@ debugLog("Current output buffer length: " . ob_get_length());
         <div class="search-box" style="display: inline-block;">
           <input type="text" placeholder="Hľadať..." class="form-control" id="search-input" style="width: 150px; padding: 4px 8px;">
         </div>
-        <form method="post" action="/edit-tree.php?id=<?= $treeId ?>" style="margin: 0; display: inline-block;">
-          <input type="hidden" name="action" value="add_record">
-          <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
-        </form>
+        <button type="button" id="add-record-btn" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
         <button type="button" id="edit-record-btn" class="btn-edit-record" style="padding: 6px 12px; font-size: 0.9rem;" disabled title="Vyberte dlaždicu kliknutím">Editovať</button>
         <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
@@ -1678,9 +1675,34 @@ document.addEventListener('DOMContentLoaded', function() {
   // Modal action buttons
   const treeId = <?= $treeId ?>;
 
+  // "+ Záznam" -> open the same modal, but empty (create mode)
+  document.getElementById('add-record-btn')?.addEventListener('click', function() {
+    // Clear selection (optional) but ensure Edit button state is correct
+    document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
+    selectedRecordCard = null;
+    updateEditButton();
+
+    // Clear modal fields
+    document.getElementById('edit-record-id').value = ''; // create mode
+    document.getElementById('edit-man-input').value = '';
+    document.getElementById('edit-woman-input').value = '';
+
+    const childrenContainer = document.getElementById('edit-children-container');
+    if (childrenContainer) {
+      childrenContainer.innerHTML = '';
+    }
+    // One empty child input by default
+    addChildInput('');
+
+    if (editModal) {
+      editModal.style.display = 'flex';
+    }
+    logToServer('EDIT-TREE: add record modal opened', `tree_id=${treeId}`);
+  });
+
   // Ulož button
   document.getElementById('save-record-btn')?.addEventListener('click', function() {
-    const recordId = document.getElementById('edit-record-id').value;
+    const recordId = document.getElementById('edit-record-id').value; // empty => create
     const manText = document.getElementById('edit-man-input').value.trim();
     const womanText = document.getElementById('edit-woman-input').value.trim();
     const childInputs = document.querySelectorAll('.child-input');
@@ -1690,7 +1712,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const formData = new URLSearchParams({
       action: 'save_record',
       tree_id: treeId,
-      record_id: recordId,
+      record_id: recordId, // empty => server creates new record
       man: manText,
       woman: womanText
     });
@@ -1759,7 +1781,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Find and highlight the person
-    const personElement = document.querySelector(`.person-name[data-seqnum="${seqNum}"]`);
+        // Graph sends "graph seq num" (first-occurrence seq), not the local tile sequence.
+        // So we must match on data-graph-seqnum, not data-seqnum.
+        const personElement = document.querySelector(`.person-name[data-graph-seqnum="${seqNum}"]`);
     if (personElement) {
       personElement.classList.add('selected');
       
@@ -1781,6 +1805,8 @@ document.addEventListener('DOMContentLoaded', function() {
       const recordCard = personElement.closest('.record-card');
       if (recordCard) {
         recordCard.classList.add('selected');
+        selectedRecordCard = recordCard;
+        updateEditButton();
       }
     }
   }

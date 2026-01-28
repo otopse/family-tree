@@ -279,18 +279,7 @@ elseif ($action === 'calculate') {
 // ---------------------------------------------------------
 elseif ($action === 'save_record') {
     try {
-        $recordId = (int)($_POST['record_id'] ?? 0);
-        if (!$recordId) {
-            jsonResponse(false, 'Chýba ID záznamu.');
-        }
-
-        // Verify record belongs to this tree
-        $stmt = db()->prepare('SELECT * FROM ft_records WHERE id = :id AND tree_id = :tree_id');
-        $stmt->execute(['id' => $recordId, 'tree_id' => $treeId]);
-        $record = $stmt->fetch();
-        if (!$record) {
-            jsonResponse(false, 'Záznam neexistuje alebo nepatrí do tohto rodokmeňa.');
-        }
+        $recordId = (int)($_POST['record_id'] ?? 0); // 0 => create new
 
         // Parse input data
         $manText = trim($_POST['man'] ?? '');
@@ -356,6 +345,41 @@ elseif ($action === 'save_record') {
         }
 
         // Get existing elements for this record
+        // If record_id is missing/0, create a new record first
+        if ($recordId === 0) {
+            $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+            $recordName = 'Nová rodina';
+            if (!empty($manText) || !empty($womanText)) {
+                $recordName = trim(($manText ? $manText : '') . ($manText && $womanText ? ' + ' : '') . ($womanText ? $womanText : ''));
+                if ($recordName === '') $recordName = 'Nová rodina';
+                // Keep record_name reasonably short
+                if (mb_strlen($recordName) > 100) $recordName = mb_substr($recordName, 0, 100);
+            }
+
+            $stmt = db()->prepare(
+                'INSERT INTO ft_records (tree_id, owner, record_name, pattern, created, modified, enabled)
+                 VALUES (:tree_id, :owner, :name, :pattern, :created, :modified, 1)'
+            );
+            $stmt->execute([
+                'tree_id' => $treeId,
+                'owner' => $user['id'],
+                'name' => $recordName,
+                'pattern' => '',
+                'created' => $now,
+                'modified' => $now,
+            ]);
+            $recordId = (int)db()->lastInsertId();
+        } else {
+            // Verify record belongs to this tree
+            $stmt = db()->prepare('SELECT * FROM ft_records WHERE id = :id AND tree_id = :tree_id');
+            $stmt->execute(['id' => $recordId, 'tree_id' => $treeId]);
+            $record = $stmt->fetch();
+            if (!$record) {
+                jsonResponse(false, 'Záznam neexistuje alebo nepatrí do tohto rodokmeňa.');
+            }
+        }
+
+        // Fetch existing elements for this record (now we have recordId for sure)
         $stmt = db()->prepare('SELECT * FROM ft_elements WHERE record_id = :record_id ORDER BY sort_order ASC');
         $stmt->execute(['record_id' => $recordId]);
         $existingElements = $stmt->fetchAll();
@@ -474,7 +498,7 @@ elseif ($action === 'save_record') {
             $stmt->execute(['id' => $childElements[$i]['id']]);
         }
 
-        jsonResponse(true, 'Záznam bol úspešne uložený.');
+        jsonResponse(true, 'Záznam bol úspešne uložený.', ['record_id' => $recordId]);
 
     } catch (PDOException $e) {
         jsonResponse(false, 'Chyba databázy: ' . $e->getMessage());
