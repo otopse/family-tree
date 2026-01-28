@@ -2,13 +2,16 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
-require_once __DIR__ . '/_layout.php';
+// Only require layout for non-embed mode (embed mode renders its own HTML)
+$isEmbed = !empty($_GET['embed']);
+if (!$isEmbed) {
+    require_once __DIR__ . '/_layout.php';
+}
 
 // Debug log helper
 $debugLog = __DIR__ . '/gedcom_debug.log';
 
-// Check if this is embedded mode
-$isEmbed = !empty($_GET['embed']);
+// Check if this is embedded mode (already checked above, but keep for compatibility)
 
 // View-tree.php never initializes the log - it only appends
 // The log is initialized only by edit-tree.php
@@ -21,23 +24,50 @@ function debugLog(string $msg): void {
     file_put_contents($debugLog, date('Y-m-d H:i:s') . " [view-tree] " . $msg . "\n", FILE_APPEND);
 }
 
-$user = require_login();
+// In embed mode, allow public trees without login
+$user = $isEmbed ? current_user() : require_login();
 $treeId = (int)($_GET['id'] ?? 0);
 debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null') . ", Embed mode: " . ($isEmbed ? 'yes' : 'no'));
 
 if (!$treeId) {
+    if ($isEmbed) {
+        http_response_code(400);
+        die('Invalid tree ID');
+    }
     flash('error', 'Neznámy rodokmeň.');
     redirect('/family-trees.php');
 }
 
-// Verify ownership
-$stmt = db()->prepare('SELECT * FROM family_trees WHERE id = :id AND owner = :owner');
-$stmt->execute(['id' => $treeId, 'owner' => $user['id']]);
+// Fetch tree (allow public access in embed mode)
+$stmt = db()->prepare('SELECT * FROM family_trees WHERE id = :id');
+$stmt->execute(['id' => $treeId]);
 $tree = $stmt->fetch();
 
 if (!$tree) {
+    if ($isEmbed) {
+        http_response_code(404);
+        die('Tree not found');
+    }
     flash('error', 'Rodokmeň neexistuje alebo k nemu nemáte prístup.');
     redirect('/family-trees.php');
+}
+
+// Verify access: owner always; non-owner only if public; in embed mode allow public without login
+$isOwner = $user && ((int)($tree['owner'] ?? 0) === (int)($user['id'] ?? 0));
+$isPublic = !empty($tree['public']);
+
+if (!$isEmbed) {
+    // Full page mode: require login and ownership or public access
+    if (!$isOwner && !$isPublic) {
+        flash('error', 'Rodokmeň neexistuje alebo k nemu nemáte prístup.');
+        redirect('/family-trees.php');
+    }
+} else {
+    // Embed mode: allow public trees even without login
+    if (!$isOwner && !$isPublic) {
+        http_response_code(403);
+        die('Access denied');
+    }
 }
 
 // Fetch all records and elements

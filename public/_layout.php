@@ -59,13 +59,7 @@ function render_header(string $title): void {
         echo '          </div>';
         echo '        </div>';
       } else {
-        echo '        <div class="nav-user">';
-        echo '          <a href="/login.php" class="nav-user-toggle">Prihlásenie</a>';
-        echo '          <div class="nav-user-menu">';
-        echo '            <a href="/login.php">Prihlásiť sa</a>';
-        echo '            <a href="/register.php">Registrácia</a>';
-        echo '          </div>';
-        echo '        </div>';
+        echo '        <a href="/login.php" class="btn-link">Prihlásenie</a>';
       }
       echo '      </div>';
   echo '      <button class="nav-toggle" aria-label="Toggle menu">';

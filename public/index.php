@@ -44,13 +44,7 @@ $user = current_user();
             </div>
           </div>
         <?php else: ?>
-          <div class="nav-user">
-            <a href="/login.php" class="nav-user-toggle">Prihlásenie</a>
-            <div class="nav-user-menu">
-              <a href="/login.php">Prihlásiť sa</a>
-              <a href="/register.php">Registrácia</a>
-            </div>
-          </div>
+          <a href="/login.php" class="btn-link">Prihlásenie</a>
         <?php endif; ?>
       </div>
       <button class="nav-toggle" aria-label="Toggle menu">
