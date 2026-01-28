@@ -23,6 +23,9 @@ $user = current_user();
         <li><a href="#features">Features</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="#contact">Contact</a></li>
+        <?php if ($user): ?>
+          <li><a href="/public-trees.php">Public Trees</a></li>
+        <?php endif; ?>
       </ul>
       <div class="nav-auth">
         <?php if ($user): ?>
