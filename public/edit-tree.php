@@ -11,8 +11,9 @@ require_once __DIR__ . '/_layout.php';
 $debugLog = __DIR__ . '/gedcom_debug.log';
 
 // Initialize log file - clear it at the start of each edit-tree.php page load
-// This ensures we start with a fresh log for each editing session
+// User can provide this file as feedback: https://family-tree.cz/gedcom_debug.log
 file_put_contents($debugLog, date('Y-m-d H:i:s') . " [edit-tree] === EDIT-TREE START (log initialized/cleared) ===\n");
+file_put_contents($debugLog, date('Y-m-d H:i:s') . " [edit-tree] REQUEST_URI=" . ($_SERVER['REQUEST_URI'] ?? '') . " | Tree ID from GET=" . ($_GET['id'] ?? '') . "\n", FILE_APPEND);
 
 function debugLog(string $msg): void {
     global $debugLog;
@@ -174,6 +175,23 @@ try {
 }
 
 // ---------------------------------------------------------
+// HELPER: person key for first-occurrence (same as view-tree: gedcom_id or fallback)
+// Fallback: full_name + birth_date + death_date so same person in different records merges.
+// Normalize dates to year (4 digits) so "1805", "1805.01.01", "[1805]" match.
+// ---------------------------------------------------------
+function get_person_key(array $el): string {
+  if (!empty($el['gedcom_id'])) {
+    return (string) $el['gedcom_id'];
+  }
+  $name = trim($el['full_name'] ?? '');
+  $birthRaw = trim($el['birth_date'] ?? '');
+  $deathRaw = trim($el['death_date'] ?? '');
+  $birth = preg_match('/\d{4}/', $birthRaw, $m) ? $m[0] : $birthRaw;
+  $death = preg_match('/\d{4}/', $deathRaw, $m) ? $m[0] : $deathRaw;
+  return 'n:' . $name . '|b:' . $birth . '|d:' . $death;
+}
+
+// ---------------------------------------------------------
 // HELPER FOR VIEW
 // ---------------------------------------------------------
 function render_person_html(?array $el, int $currentSeqNum, int $firstSeqNum): string {
@@ -274,7 +292,12 @@ debugLog("Current output buffer length: " . ob_get_length());
             <p>Žiadne záznamy.</p>
           </div>
         <?php else: ?>
-          <?php $cardCounter = 1; $personCounter = 1; $firstSeqByElementId = []; ?>
+          <?php
+            $cardCounter = 1;
+            $personCounter = 1;
+            $firstSeqByPersonKey = [];
+            debugLog("=== TILES: building first-occurrence map by person key (gedcom_id or name|birth|death) ===");
+          ?>
           <?php foreach ($viewData as $row): ?>
             <div class="record-card">
               <div class="record-id">#<?= $cardCounter++ ?></div>
@@ -282,11 +305,14 @@ debugLog("Current output buffer length: " . ob_get_length());
               <div class="record-row father-row">
                 <?php if ($row['man']): ?>
                   <?php
-                    $eid = $row['man']['id'] ?? 0;
-                    if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                    $el = $row['man'];
+                    $personKey = get_person_key($el);
+                    if (!isset($firstSeqByPersonKey[$personKey])) { $firstSeqByPersonKey[$personKey] = $personCounter; }
                     $currentSeq = $personCounter++;
-                    $firstSeq = $firstSeqByElementId[$eid];
-                    echo render_person_html($row['man'], $currentSeq, $firstSeq);
+                    $firstSeq = $firstSeqByPersonKey[$personKey];
+                    $isFirst = ($currentSeq === $firstSeq);
+                    debugLog(sprintf("TILE person: element_id=%s gedcom_id=%s personKey=%s currentSeq=%d firstSeq=%d badge=%s name=%s", $el['id'] ?? '', $el['gedcom_id'] ?? '', $personKey, $currentSeq, $firstSeq, $isFirst ? 'GREEN' : 'GRAY', $el['full_name'] ?? ''));
+                    echo render_person_html($el, $currentSeq, $firstSeq);
                   ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
@@ -296,11 +322,14 @@ debugLog("Current output buffer length: " . ob_get_length());
               <div class="record-row mother-row">
                 <?php if ($row['woman']): ?>
                   <?php
-                    $eid = $row['woman']['id'] ?? 0;
-                    if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                    $el = $row['woman'];
+                    $personKey = get_person_key($el);
+                    if (!isset($firstSeqByPersonKey[$personKey])) { $firstSeqByPersonKey[$personKey] = $personCounter; }
                     $currentSeq = $personCounter++;
-                    $firstSeq = $firstSeqByElementId[$eid];
-                    echo render_person_html($row['woman'], $currentSeq, $firstSeq);
+                    $firstSeq = $firstSeqByPersonKey[$personKey];
+                    $isFirst = ($currentSeq === $firstSeq);
+                    debugLog(sprintf("TILE person: element_id=%s gedcom_id=%s personKey=%s currentSeq=%d firstSeq=%d badge=%s name=%s", $el['id'] ?? '', $el['gedcom_id'] ?? '', $personKey, $currentSeq, $firstSeq, $isFirst ? 'GREEN' : 'GRAY', $el['full_name'] ?? ''));
+                    echo render_person_html($el, $currentSeq, $firstSeq);
                   ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
@@ -311,17 +340,21 @@ debugLog("Current output buffer length: " . ob_get_length());
                 <?php foreach ($row['children'] as $child): ?>
                   <div class="child-row">
                     <?php
-                      $eid = $child['id'] ?? 0;
-                      if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                      $el = $child;
+                      $personKey = get_person_key($el);
+                      if (!isset($firstSeqByPersonKey[$personKey])) { $firstSeqByPersonKey[$personKey] = $personCounter; }
                       $currentSeq = $personCounter++;
-                      $firstSeq = $firstSeqByElementId[$eid];
-                      echo render_person_html($child, $currentSeq, $firstSeq);
+                      $firstSeq = $firstSeqByPersonKey[$personKey];
+                      $isFirst = ($currentSeq === $firstSeq);
+                      debugLog(sprintf("TILE person: element_id=%s gedcom_id=%s personKey=%s currentSeq=%d firstSeq=%d badge=%s name=%s", $el['id'] ?? '', $el['gedcom_id'] ?? '', $personKey, $currentSeq, $firstSeq, $isFirst ? 'GREEN' : 'GRAY', $el['full_name'] ?? ''));
+                      echo render_person_html($el, $currentSeq, $firstSeq);
                     ?>
                   </div>
                 <?php endforeach; ?>
               </div>
             </div>
           <?php endforeach; ?>
+          <?php debugLog("=== TILES: firstSeqByPersonKey summary: " . json_encode($firstSeqByPersonKey)); ?>
         <?php endif; ?>
       </div>
     </div>
