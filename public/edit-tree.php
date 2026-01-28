@@ -378,13 +378,11 @@ debugLog("Current output buffer length: " . ob_get_length());
       <input type="hidden" id="edit-tree-id" value="<?= $treeId ?>">
       
       <div class="edit-input-group">
-        <label for="edit-man-input">Muž</label>
-        <input type="text" id="edit-man-input" class="edit-input" placeholder="Meno a dátumy">
+        <input type="text" id="edit-man-input" class="edit-input" placeholder="Muž">
       </div>
       
       <div class="edit-input-group">
-        <label for="edit-woman-input">Žena</label>
-        <input type="text" id="edit-woman-input" class="edit-input" placeholder="Meno a dátumy">
+        <input type="text" id="edit-woman-input" class="edit-input" placeholder="Žena">
       </div>
       
       <div id="edit-children-container">
@@ -394,9 +392,6 @@ debugLog("Current output buffer length: " . ob_get_length());
       <button type="button" id="add-child-btn" class="btn-add-child">+ Dieťa</button>
     </div>
     <div class="edit-modal-footer">
-      <button type="button" id="init-btn" class="btn-action">Inicializuj</button>
-      <button type="button" id="recalc-btn" class="btn-action">Dopočítaj</button>
-      <button type="button" id="calculate-btn" class="btn-action">Calculate</button>
       <button type="button" id="save-record-btn" class="btn-action btn-primary">Ulož</button>
     </div>
   </div>
@@ -1550,6 +1545,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Single delegated click on #record-view: person-name -> sync graph; card -> select for Edit modal
   const recordView = document.getElementById('record-view');
+  function logToServer(message, context = '') {
+    try {
+      fetch('/api/debug-log.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, context })
+      }).catch(() => {});
+    } catch (e) {
+      // ignore
+    }
+  }
   if (recordView) {
     recordView.addEventListener('click', function(e) {
       const personName = e.target.closest('.person-name');
@@ -1559,6 +1565,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (graphSeqNum) {
           highlightPersonInTiles(graphSeqNum);
           highlightPersonInGraph(graphSeqNum);
+          logToServer('EDIT-TREE: tile person click', `record_id=${card?.getAttribute('data-record-id') || ''} graphSeqNum=${graphSeqNum}`);
         }
         if (card) {
           document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
@@ -1571,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.classList.add('selected');
         selectedRecordCard = card;
         updateEditButton();
+        logToServer('EDIT-TREE: tile card selected', `record_id=${card.getAttribute('data-record-id') || ''}`);
       }
     });
   }
@@ -1581,6 +1589,13 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!selectedRecordCard) return;
       loadRecordDataIntoModal(selectedRecordCard);
       editModal.style.display = 'flex';
+      try {
+        const recordId = document.getElementById('edit-record-id')?.value || '';
+        const man = document.getElementById('edit-man-input')?.value || '';
+        const woman = document.getElementById('edit-woman-input')?.value || '';
+        const children = Array.from(document.querySelectorAll('.child-input')).map(i => i.value || '');
+        logToServer('EDIT-TREE: modal opened', JSON.stringify({ recordId, man, woman, children }));
+      } catch (e) {}
     });
   }
 
@@ -1646,7 +1661,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const div = document.createElement('div');
     div.className = 'child-input-group';
     div.innerHTML = `
-      <input type="text" class="edit-input child-input" placeholder="Meno a dátumy" value="${value}">
+      <input type="text" class="edit-input child-input" placeholder="+Dieťa" value="${value}">
       <button type="button" class="remove-child-btn">Odstrániť</button>
     `;
     div.querySelector('.remove-child-btn').addEventListener('click', function() {
@@ -1663,75 +1678,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // Modal action buttons
   const treeId = <?= $treeId ?>;
 
-  // Inicializuj button
-  document.getElementById('init-btn')?.addEventListener('click', function() {
-    if (!confirm('Naozaj chcete inicializovať (vymazať vypočítané dátumy)?')) return;
-    fetch('/tree-actions.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'init', tree_id: treeId })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        alert(data.message);
-        window.location.reload();
-      } else {
-        alert('Chyba: ' + data.message);
-      }
-    })
-    .catch(err => {
-      console.error('Error:', err);
-      alert('Chyba komunikácie so serverom.');
-    });
-  });
-
-  // Dopočítaj button (same as Calculate)
-  document.getElementById('recalc-btn')?.addEventListener('click', function() {
-    if (!confirm('Naozaj chcete dopočítať dátumy?')) return;
-    fetch('/tree-actions.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'calculate', tree_id: treeId })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        alert(data.message);
-        window.location.reload();
-      } else {
-        alert('Chyba: ' + data.message);
-      }
-    })
-    .catch(err => {
-      console.error('Error:', err);
-      alert('Chyba komunikácie so serverom.');
-    });
-  });
-
-  // Calculate button
-  document.getElementById('calculate-btn')?.addEventListener('click', function() {
-    if (!confirm('Naozaj chcete vypočítať dátumy?')) return;
-    fetch('/tree-actions.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ action: 'calculate', tree_id: treeId })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        alert(data.message);
-        window.location.reload();
-      } else {
-        alert('Chyba: ' + data.message);
-      }
-    })
-    .catch(err => {
-      console.error('Error:', err);
-      alert('Chyba komunikácie so serverom.');
-    });
-  });
-
   // Ulož button
   document.getElementById('save-record-btn')?.addEventListener('click', function() {
     const recordId = document.getElementById('edit-record-id').value;
@@ -1739,6 +1685,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const womanText = document.getElementById('edit-woman-input').value.trim();
     const childInputs = document.querySelectorAll('.child-input');
     const childrenTexts = Array.from(childInputs).map(input => input.value.trim()).filter(v => v);
+    logToServer('EDIT-TREE: modal save click', JSON.stringify({ recordId, manText, womanText, childrenTexts }));
 
     const formData = new URLSearchParams({
       action: 'save_record',
