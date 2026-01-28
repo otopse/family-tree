@@ -5,7 +5,7 @@ require_once __DIR__ . '/_bootstrap.php';
 
 $user = current_user();
 ?><!doctype html>
-<html lang="sk">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,14 +23,12 @@ $user = current_user();
         <li><a href="/?section=features" data-section="features">Features</a></li>
         <li><a href="/?section=pricing" data-section="pricing">Pricing</a></li>
         <li><a href="/?section=contact" data-section="contact">Contact</a></li>
-        <?php if ($user): ?>
-          <li class="nav-public">
-            <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>
-            <div class="nav-public-menu" role="menu" aria-label="Public Trees">
-              <div class="nav-public-loading">Načítavam...</div>
-            </div>
-          </li>
-        <?php endif; ?>
+        <li class="nav-public">
+          <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>
+          <div class="nav-public-menu" role="menu" aria-label="Public Trees">
+            <div class="nav-public-loading">Loading...</div>
+          </div>
+        </li>
       </ul>
       <div class="nav-auth">
         <?php if ($user): ?>
@@ -46,8 +44,13 @@ $user = current_user();
             </div>
           </div>
         <?php else: ?>
-          <a href="/login.php" class="btn-link">Prihlásenie</a>
-          <a href="/register.php" class="btn-primary">Registrácia</a>
+          <div class="nav-user">
+            <a href="/login.php" class="nav-user-toggle">Prihlásenie</a>
+            <div class="nav-user-menu">
+              <a href="/login.php">Prihlásiť sa</a>
+              <a href="/register.php">Registrácia</a>
+            </div>
+          </div>
         <?php endif; ?>
       </div>
       <button class="nav-toggle" aria-label="Toggle menu">
@@ -61,38 +64,38 @@ $user = current_user();
   <main>
     <section class="hero" id="home">
       <div class="container">
-        <h1 class="hero-title">Vytvorte si svoj rodokmeň</h1>
-        <p class="hero-subtitle">Objavte históriu svojej rodiny a zachovajte ju pre budúce generácie</p>
+        <h1 class="hero-title">Create Your Family Tree</h1>
+        <p class="hero-subtitle">Discover your family history and preserve it for future generations</p>
         <div class="hero-cta">
-          <a href="/register.php" class="btn-primary btn-large">Začať zdarma</a>
-          <a href="#features" class="btn-secondary btn-large">Zistiť viac</a>
+          <a href="/register.php" class="btn-primary btn-large">Get Started Free</a>
+          <a href="#features" class="btn-secondary btn-large">Learn More</a>
         </div>
       </div>
     </section>
 
     <section id="features" class="features">
       <div class="container">
-        <h2 class="section-title">Funkcie</h2>
+        <h2 class="section-title">Features</h2>
         <div class="features-grid">
           <div class="feature-card">
             <div class="feature-icon">🌳</div>
-            <h3>Vizuálny rodokmeň</h3>
-            <p>Interaktívne zobrazenie vašej rodiny v prehľadnom stromovom formáte</p>
+            <h3>Visual Family Tree</h3>
+            <p>Interactive display of your family in a clear tree format</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">📸</div>
-            <h3>Fotografie a dokumenty</h3>
-            <p>Pridajte fotografie a dôležité dokumenty ku každému členovi rodiny</p>
+            <h3>Photos and Documents</h3>
+            <p>Add photos and important documents for each family member</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">🔒</div>
-            <h3>Súkromie a bezpečnosť</h3>
-            <p>Vaše údaje sú v bezpečí a môžete si nastaviť úroveň súkromia</p>
+            <h3>Privacy and Security</h3>
+            <p>Your data is secure and you can set your privacy level</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">📱</div>
-            <h3>Responzívny dizajn</h3>
-            <p>Prístup k rodokmeňu z akéhokoľvek zariadenia - počítač, tablet alebo mobil</p>
+            <h3>Responsive Design</h3>
+            <p>Access your family tree from any device - computer, tablet or mobile</p>
           </div>
         </div>
       </div>
@@ -100,29 +103,29 @@ $user = current_user();
 
     <section id="pricing" class="pricing">
       <div class="container">
-        <h2 class="section-title">Cenník</h2>
+        <h2 class="section-title">Pricing</h2>
         <div class="pricing-grid">
           <div class="pricing-card">
-            <h3>Základný</h3>
-            <div class="price">Zdarma</div>
+            <h3>Basic</h3>
+            <div class="price">Free</div>
             <ul class="pricing-features">
-              <li>Až 50 členov rodiny</li>
-              <li>Základné zobrazenie rodokmeňa</li>
-              <li>5 GB úložného priestoru</li>
+              <li>Up to 50 family members</li>
+              <li>Basic family tree view</li>
+              <li>5 GB storage space</li>
             </ul>
-            <a href="/register.php" class="btn-secondary">Začať</a>
+            <a href="/register.php" class="btn-secondary">Get Started</a>
           </div>
           <div class="pricing-card featured">
-            <div class="badge">Odporúčané</div>
+            <div class="badge">Recommended</div>
             <h3>Premium</h3>
-            <div class="price">9,99 €<span>/mesiac</span></div>
+            <div class="price">€9.99<span>/month</span></div>
             <ul class="pricing-features">
-              <li>Neobmedzený počet členov</li>
-              <li>Pokročilé funkcie</li>
-              <li>50 GB úložného priestoru</li>
-              <li>Prioritná podpora</li>
+              <li>Unlimited family members</li>
+              <li>Advanced features</li>
+              <li>50 GB storage space</li>
+              <li>Priority support</li>
             </ul>
-            <a href="/register.php" class="btn-primary">Vybrať</a>
+            <a href="/register.php" class="btn-primary">Choose</a>
           </div>
         </div>
       </div>
@@ -130,16 +133,16 @@ $user = current_user();
 
     <section id="contact" class="contact">
       <div class="container">
-        <h2 class="section-title">Kontakt</h2>
-        <p class="contact-text">Máte otázky? Radi vám pomôžeme!</p>
-        <a href="mailto:info@family-tree.cz" class="btn-primary">Kontaktovať nás</a>
+        <h2 class="section-title">Contact</h2>
+        <p class="contact-text">Have questions? We're happy to help!</p>
+        <a href="mailto:info@family-tree.cz" class="btn-primary">Contact Us</a>
       </div>
     </section>
   </main>
 
   <footer class="footer">
     <div class="container">
-      <p>&copy; 2026 Family Tree. Všetky práva vyhradené.</p>
+      <p>&copy; 2026 Family Tree. All rights reserved.</p>
     </div>
   </footer>
 

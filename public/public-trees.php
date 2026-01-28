@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
 
-$user = require_login();
+// Public trees accessible without login
+$user = current_user();
 
 // Fetch public family trees
 $trees = [];
@@ -102,6 +103,8 @@ if ($isModal) {
   exit;
 }
 
+// For full page view, require login only if accessing non-public trees
+// But since this page only shows public trees, we can allow guests
 require_once __DIR__ . '/_layout.php';
 render_header('Verejné rodokmene');
 ?>

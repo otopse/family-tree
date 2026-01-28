@@ -39,14 +39,13 @@ function render_header(string $title): void {
   echo '        <li><a href="/?section=features" data-section="features">Funkcie</a></li>';
   echo '        <li><a href="/?section=pricing" data-section="pricing">Cenník</a></li>';
   echo '        <li><a href="/?section=contact" data-section="contact">Kontakt</a></li>';
-  if ($user) {
-    echo '        <li class="nav-public">';
-    echo '          <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>';
-    echo '          <div class="nav-public-menu" role="menu" aria-label="Public Trees">';
-    echo '            <div class="nav-public-loading">Načítavam...</div>';
-    echo '          </div>';
-    echo '        </li>';
-  }
+  // Public Trees available to everyone (logged in or not)
+  echo '        <li class="nav-public">';
+  echo '          <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>';
+  echo '          <div class="nav-public-menu" role="menu" aria-label="Public Trees">';
+  echo '            <div class="nav-public-loading">Načítavam...</div>';
+  echo '          </div>';
+  echo '        </li>';
   echo '      </ul>';
       echo '      <div class="nav-auth">';
       if ($user) {
@@ -60,8 +59,13 @@ function render_header(string $title): void {
         echo '          </div>';
         echo '        </div>';
       } else {
-        echo '        <a href="/login.php" class="btn-link">Prihlásenie</a>';
-        echo '        <a href="/register.php" class="btn-primary">Registrácia</a>';
+        echo '        <div class="nav-user">';
+        echo '          <a href="/login.php" class="nav-user-toggle">Prihlásenie</a>';
+        echo '          <div class="nav-user-menu">';
+        echo '            <a href="/login.php">Prihlásiť sa</a>';
+        echo '            <a href="/register.php">Registrácia</a>';
+        echo '          </div>';
+        echo '        </div>';
       }
       echo '      </div>';
   echo '      <button class="nav-toggle" aria-label="Toggle menu">';

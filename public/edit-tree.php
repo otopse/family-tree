@@ -22,7 +22,8 @@ function debugLog(string $msg): void {
 
 debugLog("Tree ID: " . ($_GET['id'] ?? '0') . ", Request time: " . date('Y-m-d H:i:s'));
 
-$user = require_login();
+// Public trees can be viewed without login
+$user = current_user();
 $treeId = (int) ($_GET['id'] ?? 0);
 debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null'));
 
@@ -37,17 +38,22 @@ if (!$tree) {
   redirect('/family-trees.php');
 }
 
-$isOwner = ((int)($tree['owner'] ?? 0) === (int)($user['id'] ?? 0));
+$isOwner = $user && ((int)($tree['owner'] ?? 0) === (int)($user['id'] ?? 0));
 $isPublic = !empty($tree['public']);
 
-// Access: owner always; non-owner only if public
+// Access: owner always; non-owner only if public; guest only if public
 if (!$isOwner && !$isPublic) {
-  flash('error', 'Rodokmeň neexistuje alebo k nemu nemáte prístup.');
-  redirect('/family-trees.php');
+  if (!$user) {
+    flash('error', 'Musíte sa prihlásiť alebo vybrať verejný rodokmeň.');
+    redirect('/login.php');
+  } else {
+    flash('error', 'Rodokmeň neexistuje alebo k nemu nemáte prístup.');
+    redirect('/family-trees.php');
+  }
 }
 
-// Read-only if forced public view or if you are not the owner
-$isReadOnly = $forcePublicView || !$isOwner;
+// Read-only if forced public view, if you are not the owner, or if not logged in
+$isReadOnly = $forcePublicView || !$isOwner || !$user;
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -291,8 +297,8 @@ debugLog("Current output buffer length: " . ob_get_length());
         <?php if (!$isReadOnly): ?>
           <button type="button" id="add-record-btn" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
           <button type="button" id="edit-record-btn" class="btn-edit-record" style="padding: 6px 12px; font-size: 0.9rem;" disabled title="Vyberte dlaždicu kliknutím">Editovať</button>
-          <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
         <?php endif; ?>
+        <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
     </div>
   </div><?php
@@ -1925,11 +1931,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Export PDF functionality for edit-tree.php
+  // Export PDF functionality for edit-tree.php (available in read-only too)
   const exportPdfBtn = document.getElementById('export-pdf-btn');
   console.log('[EDIT-TREE] Export PDF button found:', exportPdfBtn !== null);
   
-  if (!IS_READ_ONLY && exportPdfBtn) {
+  if (exportPdfBtn) {
     console.log('[EDIT-TREE] Export PDF button exists, adding event listener');
     exportPdfBtn.addEventListener('click', function() {
       console.log('[EDIT-TREE] Export PDF button clicked');
@@ -2165,7 +2171,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.textContent = originalText;
       }
     });
-  } else if (!IS_READ_ONLY) {
+  } else {
     console.error('[EDIT-TREE] Export PDF button NOT FOUND in DOM');
   }
 });
