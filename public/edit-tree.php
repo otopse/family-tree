@@ -275,7 +275,7 @@ debugLog("Current output buffer length: " . ob_get_length());
           <input type="hidden" name="action" value="add_record">
           <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
         </form>
-        <button id="edit-record-btn" class="btn-secondary" style="padding: 6px 12px; font-size: 0.9rem;" disabled>Editovať</button>
+        <button type="button" id="edit-record-btn" class="btn-edit-record" style="padding: 6px 12px; font-size: 0.9rem;" disabled title="Vyberte dlaždicu kliknutím">Editovať</button>
         <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
     </div>
@@ -927,6 +927,21 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
   .btn-action.btn-primary:hover {
     background: #1677ff;
   }
+
+  /* Editovať button: primary when enabled, grey when disabled */
+  #edit-record-btn.btn-edit-record {
+    background: #9ca3af;
+    color: #fff;
+    border: none;
+    cursor: not-allowed;
+  }
+  #edit-record-btn.btn-edit-record:not(:disabled) {
+    background: var(--primary-color, #1890ff);
+    cursor: pointer;
+  }
+  #edit-record-btn.btn-edit-record:not(:disabled):hover {
+    background: #1677ff;
+  }
 </style>
 
 <script>
@@ -1533,21 +1548,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // Click on record card to select it
+  // Single delegated click on #record-view: person-name -> sync graph; card -> select for Edit modal
   const recordView = document.getElementById('record-view');
   if (recordView) {
     recordView.addEventListener('click', function(e) {
+      const personName = e.target.closest('.person-name');
       const card = e.target.closest('.record-card');
-      if (card) {
+      if (personName) {
+        const graphSeqNum = parseInt(personName.getAttribute('data-graph-seqnum'));
+        if (graphSeqNum) {
+          highlightPersonInTiles(graphSeqNum);
+          highlightPersonInGraph(graphSeqNum);
+        }
+        if (card) {
+          document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+          selectedRecordCard = card;
+          updateEditButton();
+        }
+      } else if (card) {
         document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
+        selectedRecordCard = card;
         updateEditButton();
       }
     });
   }
 
   // Open modal when Edit button is clicked
-  if (editRecordBtn) {
+  if (editRecordBtn && editModal) {
     editRecordBtn.addEventListener('click', function() {
       if (!selectedRecordCard) return;
       loadRecordDataIntoModal(selectedRecordCard);
@@ -1857,23 +1886,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
   
-  // Add click handlers to person names in tiles using event delegation
-  // Pri kliknutí otvárať v grafe prvý výskyt (data-graph-seqnum)
-  const recordView = document.getElementById('record-view');
+  // Cursor for person names (click handler is above, single delegation on recordView)
   if (recordView) {
-    recordView.addEventListener('click', function(e) {
-      const personName = e.target.closest('.person-name');
-      if (personName) {
-        const graphSeqNum = parseInt(personName.getAttribute('data-graph-seqnum'));
-        if (graphSeqNum) {
-          console.log('[EDIT-TREE] Person clicked in tile, graphSeqNum (first occurrence):', graphSeqNum);
-          highlightPersonInTiles(graphSeqNum);
-          highlightPersonInGraph(graphSeqNum);
-        }
-      }
-    });
-    
-    // Set cursor for all person names
     document.querySelectorAll('.person-name').forEach(personName => {
       personName.style.cursor = 'pointer';
     });
