@@ -176,7 +176,7 @@ try {
 // ---------------------------------------------------------
 // HELPER FOR VIEW
 // ---------------------------------------------------------
-function render_person_html(?array $el, int $seqNum): string {
+function render_person_html(?array $el, int $currentSeqNum, int $firstSeqNum): string {
   if (!$el) {
     return '<span class="empty-placeholder">&nbsp;</span>';
   }
@@ -229,7 +229,14 @@ function render_person_html(?array $el, int $seqNum): string {
       $dateStr = "(? - {$deathStr})";
   }
 
-  return '<span class="person-name" data-seqnum="' . $seqNum . '" data-element-id="' . ($el['id'] ?? '') . '"><span class="seq-badge">' . $seqNum . '</span> ' . $name . ' ' . $dateStr . '</span>';
+  // Zelené návestie len pri prvom výskyte; pri opakovaní sivé pole s por. č. prvého výskytu
+  $isFirst = ($currentSeqNum === $firstSeqNum);
+  if ($isFirst) {
+    $badgeHtml = '<span class="seq-badge">' . $currentSeqNum . '</span>';
+  } else {
+    $badgeHtml = '<span class="seq-badge-ref">' . $firstSeqNum . '</span>';
+  }
+  return '<span class="person-name" data-seqnum="' . $currentSeqNum . '" data-graph-seqnum="' . $firstSeqNum . '" data-element-id="' . ($el['id'] ?? '') . '">' . $badgeHtml . ' ' . $name . ' ' . $dateStr . '</span>';
 }
 
 render_header('Editovať rodokmeň: ' . e($tree['tree_name']));
@@ -267,14 +274,20 @@ debugLog("Current output buffer length: " . ob_get_length());
             <p>Žiadne záznamy.</p>
           </div>
         <?php else: ?>
-          <?php $cardCounter = 1; $personCounter = 1; ?>
+          <?php $cardCounter = 1; $personCounter = 1; $firstSeqByElementId = []; ?>
           <?php foreach ($viewData as $row): ?>
             <div class="record-card">
               <div class="record-id">#<?= $cardCounter++ ?></div>
               
               <div class="record-row father-row">
                 <?php if ($row['man']): ?>
-                  <?= render_person_html($row['man'], $personCounter++) ?>
+                  <?php
+                    $eid = $row['man']['id'] ?? 0;
+                    if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                    $currentSeq = $personCounter++;
+                    $firstSeq = $firstSeqByElementId[$eid];
+                    echo render_person_html($row['man'], $currentSeq, $firstSeq);
+                  ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
                 <?php endif; ?>
@@ -282,7 +295,13 @@ debugLog("Current output buffer length: " . ob_get_length());
 
               <div class="record-row mother-row">
                 <?php if ($row['woman']): ?>
-                  <?= render_person_html($row['woman'], $personCounter++) ?>
+                  <?php
+                    $eid = $row['woman']['id'] ?? 0;
+                    if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                    $currentSeq = $personCounter++;
+                    $firstSeq = $firstSeqByElementId[$eid];
+                    echo render_person_html($row['woman'], $currentSeq, $firstSeq);
+                  ?>
                 <?php else: ?>
                   <span class="empty-placeholder">&nbsp;</span>
                 <?php endif; ?>
@@ -291,7 +310,13 @@ debugLog("Current output buffer length: " . ob_get_length());
               <div class="children-list">
                 <?php foreach ($row['children'] as $child): ?>
                   <div class="child-row">
-                    <?= render_person_html($child, $personCounter++) ?>
+                    <?php
+                      $eid = $child['id'] ?? 0;
+                      if (!isset($firstSeqByElementId[$eid])) { $firstSeqByElementId[$eid] = $personCounter; }
+                      $currentSeq = $personCounter++;
+                      $firstSeq = $firstSeqByElementId[$eid];
+                      echo render_person_html($child, $currentSeq, $firstSeq);
+                    ?>
                   </div>
                 <?php endforeach; ?>
               </div>
@@ -596,6 +621,22 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     display: inline-block;
     text-align: center;
     line-height: 1.1; /* Reduced from 1.2 */
+  }
+
+  /* Sivé pole – por. č. prvého výskytu pri opakovaných menách */
+  .seq-badge-ref {
+    background-color: #9ca3af;
+    color: white;
+    padding: 0px 3px;
+    border-radius: 3px;
+    font-size: 9px;
+    margin-right: 3px;
+    vertical-align: middle;
+    font-weight: bold;
+    min-width: 16px;
+    display: inline-block;
+    text-align: center;
+    line-height: 1.1;
   }
   
   .person-name {
@@ -1342,16 +1383,17 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   
   // Add click handlers to person names in tiles using event delegation
+  // Pri kliknutí otvárať v grafe prvý výskyt (data-graph-seqnum)
   const recordView = document.getElementById('record-view');
   if (recordView) {
     recordView.addEventListener('click', function(e) {
       const personName = e.target.closest('.person-name');
       if (personName) {
-        const seqNum = parseInt(personName.getAttribute('data-seqnum'));
-        if (seqNum) {
-          console.log('[EDIT-TREE] Person clicked in tile, seqNum:', seqNum);
-          highlightPersonInTiles(seqNum);
-          highlightPersonInGraph(seqNum);
+        const graphSeqNum = parseInt(personName.getAttribute('data-graph-seqnum'));
+        if (graphSeqNum) {
+          console.log('[EDIT-TREE] Person clicked in tile, graphSeqNum (first occurrence):', graphSeqNum);
+          highlightPersonInTiles(graphSeqNum);
+          highlightPersonInGraph(graphSeqNum);
         }
       }
     });
@@ -1491,47 +1533,61 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         svgClone.insertBefore(styleTag, svgClone.firstChild);
         
-        // Get SVG dimensions
+        // Get SVG dimensions and panel width for PDF (include QR panel)
         const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
         const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
+        const panelWidth = 220;
+        const scale = 2;
+        const totalWidth = (svgWidth + panelWidth) * scale;
+        const totalHeight = svgHeight * scale;
         
-        // Create canvas for conversion
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        const scale = 2; // For better quality
-        canvas.width = svgWidth * scale;
-        canvas.height = svgHeight * scale;
+        canvas.width = totalWidth;
+        canvas.height = totalHeight;
         
-        // Fill white background
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Convert SVG to image with inline styles
         const svgData = new XMLSerializer().serializeToString(svgClone);
         const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
-        
         const img = new Image();
         
-        img.onload = function() {
+        const infoPanel = iframeDoc.getElementById('info-panel');
+        const treeName = (infoPanel && infoPanel.dataset && infoPanel.dataset.treeName) ? infoPanel.dataset.treeName : '';
+        const treeCreated = (infoPanel && infoPanel.dataset && infoPanel.dataset.treeCreated) ? infoPanel.dataset.treeCreated : '';
+        
+        function drawPanelBackgroundAndLabels() {
+          const panelLeft = svgWidth * scale;
+          const pw = panelWidth * scale;
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(panelLeft, 0, pw, totalHeight);
+          ctx.strokeStyle = '#ddd';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(panelLeft, 0, pw, totalHeight);
+          ctx.fillStyle = '#666';
+          ctx.font = 'bold ' + (12 * scale) + 'px "Segoe UI", sans-serif';
+          ctx.fillText('Rodokmeň: ' + treeName, panelLeft + 16 * scale, 28 * scale);
+          ctx.fillText('Vytvorený: ' + treeCreated, panelLeft + 16 * scale, 52 * scale);
+        }
+        function drawCopyrightAndFinish() {
+          const panelLeft = svgWidth * scale;
+          ctx.fillStyle = '#999';
+          ctx.font = (14 * scale) + 'px "Segoe UI", sans-serif';
+          ctx.fillText('© Family-tree.cz (<?= date('Y') ?>)', panelLeft + 16 * scale, totalHeight - 20 * scale);
           try {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
-            // Try to use jsPDF if available
             if (typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF) {
               const { jsPDF } = window.jspdf;
               const pdf = new jsPDF({
-                orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                orientation: totalWidth > totalHeight ? 'landscape' : 'portrait',
                 unit: 'px',
-                format: [canvas.width, canvas.height]
+                format: [totalWidth, totalHeight]
               });
-              
-              pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+              pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, totalWidth, totalHeight);
               pdf.save('rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.pdf');
               console.log('[EDIT-TREE] PDF exported successfully');
             } else {
-              console.log('[EDIT-TREE] jsPDF not available, falling back to PNG');
-              // Fallback: download as PNG
               canvas.toBlob(function(blob) {
                 if (blob) {
                   const downloadUrl = URL.createObjectURL(blob);
@@ -1548,7 +1604,37 @@ document.addEventListener('DOMContentLoaded', function() {
           } catch (e) {
             console.error('[EDIT-TREE] Export error:', e);
             alert('Chyba pri exporte: ' + e.message);
-          } finally {
+          }
+          URL.revokeObjectURL(url);
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+        function tryDrawQrThenFinish() {
+          drawPanelBackgroundAndLabels();
+          const viewUrl = iframe.contentWindow ? iframe.contentWindow.location.href : '';
+          const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(viewUrl);
+          const qrImg = new Image();
+          qrImg.crossOrigin = 'anonymous';
+          qrImg.onload = function() {
+            try {
+              const qrSize = 120 * scale;
+              const panelLeft = svgWidth * scale;
+              const qrX = panelLeft + (panelWidth * scale - qrSize) / 2;
+              ctx.drawImage(qrImg, qrX, 70 * scale, qrSize, qrSize);
+            } catch (e) {}
+            drawCopyrightAndFinish();
+          };
+          qrImg.onerror = function() { drawCopyrightAndFinish(); };
+          qrImg.src = qrApiUrl;
+        }
+        
+        img.onload = function() {
+          try {
+            ctx.drawImage(img, 0, 0, svgWidth * scale, svgHeight * scale);
+            tryDrawQrThenFinish();
+          } catch (e) {
+            console.error('[EDIT-TREE] Export error:', e);
+            alert('Chyba pri exporte: ' + e.message);
             URL.revokeObjectURL(url);
             btn.disabled = false;
             btn.textContent = originalText;

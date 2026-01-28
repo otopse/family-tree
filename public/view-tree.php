@@ -305,19 +305,17 @@ if ($isEmbed) {
     <body>
         <div id="tree-wrapper" style="position: relative;">
             <div id="loading" style="padding: 20px;">Načítavam graf...</div>
-            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;">
+            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;" data-tree-name="<?= e($tree['tree_name']) ?>" data-tree-created="<?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?>">
                 <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong><br>
-                    <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
+                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong> <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
                 </div>
                 <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong><br>
-                    <span style="font-size: 13px;"><?= e(date('d.m.Y', strtotime($tree['created']))) ?></span>
+                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
                 </div>
                 <div style="margin-bottom: 12px; text-align: center;">
-                    <div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div>
+                    <a id="qrcode-link" href="#" target="_blank" rel="noopener" style="display: inline-block;"><div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div></a>
                 </div>
-                <div style="text-align: center; font-size: 10px; color: #999; margin-top: 8px;">
+                <div style="text-align: center; font-size: 14px; color: #999; margin-top: 8px;">
                     © Family-tree.cz (<?= date('Y') ?>)
                 </div>
             </div>
@@ -365,19 +363,17 @@ if ($isEmbed) {
         
         <div id="tree-wrapper" style="position: relative;">
             <div id="loading" style="padding: 20px;">Načítavam graf...</div>
-            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;">
+            <div id="info-panel" style="display: none; position: absolute; right: 20px; top: 0; width: 200px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; font-family: 'Segoe UI', sans-serif;" data-tree-name="<?= e($tree['tree_name']) ?>" data-tree-created="<?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?>">
                 <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong><br>
-                    <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
+                    <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong> <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
                 </div>
                 <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong><br>
-                    <span style="font-size: 13px;"><?= e(date('d.m.Y', strtotime($tree['created']))) ?></span>
+                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
                 </div>
                 <div style="margin-bottom: 12px; text-align: center;">
-                    <div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div>
+                    <a id="qrcode-link" href="#" target="_blank" rel="noopener" style="display: inline-block;"><div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div></a>
                 </div>
-                <div style="text-align: center; font-size: 10px; color: #999; margin-top: 8px;">
+                <div style="text-align: center; font-size: 14px; color: #999; margin-top: 8px;">
                     © Family-tree.cz (<?= date('Y') ?>)
                 </div>
             </div>
@@ -924,11 +920,12 @@ debugLog("JavaScript script tag opened");
                 infoPanel.style.top = firstY + 'px';
                 infoPanel.style.display = 'block';
                 
-                // Generate QR code
+                // Generate QR code and set link to open page in new window
                 const currentUrl = window.location.href;
+                const qrCodeLink = document.getElementById('qrcode-link');
                 const qrCodeDiv = document.getElementById('qrcode');
+                if (qrCodeLink) qrCodeLink.href = currentUrl;
                 if (qrCodeDiv) {
-                    // Use QR code API
                     const qrSize = 120;
                     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(currentUrl)}`;
                     const img = document.createElement('img');
@@ -938,7 +935,6 @@ debugLog("JavaScript script tag opened");
                     img.style.height = '100%';
                     img.style.display = 'block';
                     img.onerror = function() {
-                        // Fallback if QR API fails
                         qrCodeDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 11px;">QR kód<br>nedostupný</div>';
                     };
                     qrCodeDiv.appendChild(img);
@@ -1064,45 +1060,59 @@ debugLog("JavaScript script tag opened");
             `;
             svgClone.insertBefore(styleTag, svgClone.firstChild);
             
-            // Get SVG dimensions
+            // Get SVG dimensions and panel width for PDF
             const svgWidth = parseFloat(svg.getAttribute('width')) || svg.getBBox().width;
             const svgHeight = parseFloat(svg.getAttribute('height')) || svg.getBBox().height;
+            const panelWidth = 220;
+            const scale = 2;
+            const totalWidth = (svgWidth + panelWidth) * scale;
+            const totalHeight = svgHeight * scale;
             
-            // Create canvas for conversion
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            const scale = 2; // For better quality
-            canvas.width = svgWidth * scale;
-            canvas.height = svgHeight * scale;
+            canvas.width = totalWidth;
+            canvas.height = totalHeight;
             
-            // Fill white background
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Convert SVG to image with inline styles
             const svgData = new XMLSerializer().serializeToString(svgClone);
             const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
-            
             const img = new Image();
             
-            img.onload = function() {
+            function drawPanelBackgroundAndLabels() {
+                const infoPanel = document.getElementById('info-panel');
+                const treeName = (infoPanel && infoPanel.dataset.treeName) ? infoPanel.dataset.treeName : '';
+                const treeCreated = (infoPanel && infoPanel.dataset.treeCreated) ? infoPanel.dataset.treeCreated : '';
+                const panelLeft = svgWidth * scale;
+                const pw = panelWidth * scale;
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(panelLeft, 0, pw, totalHeight);
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(panelLeft, 0, pw, totalHeight);
+                ctx.fillStyle = '#666';
+                ctx.font = 'bold ' + (12 * scale) + 'px "Segoe UI", sans-serif';
+                ctx.fillText('Rodokmeň: ' + treeName, panelLeft + 16 * scale, 28 * scale);
+                ctx.fillText('Vytvorený: ' + treeCreated, panelLeft + 16 * scale, 52 * scale);
+            }
+            function drawCopyrightAndFinish() {
+                const panelLeft = svgWidth * scale;
+                ctx.fillStyle = '#999';
+                ctx.font = (14 * scale) + 'px "Segoe UI", sans-serif';
+                ctx.fillText('© Family-tree.cz (<?= date('Y') ?>)', panelLeft + 16 * scale, totalHeight - 20 * scale);
                 try {
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    
-                    // Try to use jsPDF if available
                     if (typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF) {
                         const { jsPDF } = window.jspdf;
                         const pdf = new jsPDF({
-                            orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+                            orientation: totalWidth > totalHeight ? 'landscape' : 'portrait',
                             unit: 'px',
-                            format: [canvas.width, canvas.height]
+                            format: [totalWidth, totalHeight]
                         });
-                        
-                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+                        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, totalWidth, totalHeight);
                         pdf.save('rodokmen_<?= $treeId ?>_<?= date('Y-m-d') ?>.pdf');
                     } else {
-                        // Fallback: download as PNG
                         canvas.toBlob(function(blob) {
                             if (blob) {
                                 const downloadUrl = URL.createObjectURL(blob);
@@ -1119,10 +1129,40 @@ debugLog("JavaScript script tag opened");
                 } catch (e) {
                     console.error('Export error:', e);
                     alert('Chyba pri exporte: ' + e.message);
-                } finally {
-                    URL.revokeObjectURL(url);
+                }
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+            function tryDrawQrThenFinish() {
+                drawPanelBackgroundAndLabels();
+                const currentUrl = window.location.href;
+                const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + encodeURIComponent(currentUrl);
+                const qrImg = new Image();
+                qrImg.crossOrigin = 'anonymous';
+                qrImg.onload = function() {
+                    try {
+                        const qrSize = 120 * scale;
+                        const panelLeft = svgWidth * scale;
+                        const qrX = panelLeft + (panelWidth * scale - qrSize) / 2;
+                        ctx.drawImage(qrImg, qrX, 70 * scale, qrSize, qrSize);
+                    } catch (e) { /* CORS or draw error */ }
+                    drawCopyrightAndFinish();
+                };
+                qrImg.onerror = function() { drawCopyrightAndFinish(); };
+                qrImg.src = qrApiUrl;
+            }
+            
+            img.onload = function() {
+                try {
+                    ctx.drawImage(img, 0, 0, svgWidth * scale, svgHeight * scale);
+                    tryDrawQrThenFinish();
+                } catch (e) {
+                    console.error('Export error:', e);
+                    alert('Chyba pri exporte: ' + e.message);
                     btn.disabled = false;
                     btn.textContent = originalText;
+                } finally {
+                    URL.revokeObjectURL(url);
                 }
             };
             
