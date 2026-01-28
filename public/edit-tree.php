@@ -1707,8 +1707,31 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(r => r.json())
     .then(data => {
       if (data.success) {
-        alert(data.message);
-        window.location.reload();
+        // After saving, automatically run init + calculate, then refresh UI (tiles + graph)
+        const runAction = (actionName) => {
+          const params = new URLSearchParams({ action: actionName, tree_id: String(treeId) });
+          return fetch('/tree-actions.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params
+          }).then(r => r.json());
+        };
+
+        runAction('init')
+          .then(initRes => {
+            if (!initRes.success) throw new Error(initRes.message || 'Inicializácia zlyhala');
+            return runAction('calculate');
+          })
+          .then(calcRes => {
+            if (!calcRes.success) throw new Error(calcRes.message || 'Výpočet zlyhal');
+            alert(data.message + '\n\n' + calcRes.message);
+            window.location.reload();
+          })
+          .catch(err => {
+            console.error('Post-save init/calculate error:', err);
+            alert(data.message + '\n\nUpozornenie: Nepodarilo sa spustiť Inicializovať/Výpočet: ' + (err?.message || err));
+            window.location.reload();
+          });
       } else {
         alert('Chyba: ' + data.message);
       }
@@ -1758,9 +1781,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const recordCard = personElement.closest('.record-card');
       if (recordCard) {
         recordCard.classList.add('selected');
-        setTimeout(() => {
-          recordCard.classList.remove('selected');
-        }, 2000);
       }
     }
   }

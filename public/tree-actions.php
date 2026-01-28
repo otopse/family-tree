@@ -40,15 +40,18 @@ if ($action === 'init') {
         // Find all records belonging to this tree
         // ft_elements -> record_id -> ft_records -> tree_id
         
-        // We only want to clear dates that match the imputed format '[YYYY]'
-        // or potentially other imputed formats if we change them. 
-        // For now, we assume imputed dates are stored as '[...]'
+        // We only want to clear dates that match the *imputed* format.
+        //
+        // IMPORTANT:
+        // - Manually entered "fictional" dates are stored as "[YYYY]" and must NOT be cleared.
+        // - Automatically calculated/imputed dates are stored as "[[YYYY]]" (double brackets).
+        //   This lets us safely run init+calculate after edits without deleting user input.
         
         $sql = "UPDATE ft_elements e
                 JOIN ft_records r ON e.record_id = r.id
                 SET e.birth_date = NULL
                 WHERE r.tree_id = :tree_id
-                  AND e.birth_date LIKE '[%]'";
+                  AND e.birth_date LIKE '[[%]]'";
         
         $stmt = db()->prepare($sql);
         $stmt->execute(['tree_id' => $treeId]);
@@ -59,7 +62,7 @@ if ($action === 'init') {
                 JOIN ft_records r ON e.record_id = r.id
                 SET e.death_date = NULL
                 WHERE r.tree_id = :tree_id
-                  AND e.death_date LIKE '[%]'";
+                  AND e.death_date LIKE '[[%]]'";
         $stmtDeath = db()->prepare($sqlDeath);
         $stmtDeath->execute(['tree_id' => $treeId]);
         
@@ -111,7 +114,7 @@ elseif ($action === 'calculate') {
             // Or treat them as valid? 
             // If we ran "Init" before, they are gone. 
             // If we run "Calculate" on top of existing, we might want to respect them or overwrite.
-            // Let's assume we treat [YYYY] as a valid year YYYY for calculation purposes.
+            // Treat [YYYY] and [[YYYY]] as valid year YYYY for calculation purposes.
             $cleanStr = str_replace(['[', ']'], '', $dateStr);
             
             if (preg_match('/^(\d{4})/', $cleanStr, $m)) {
@@ -190,7 +193,7 @@ elseif ($action === 'calculate') {
                 // 1. Woman from Oldest Child
                 if ($womanYear === null && $oldestChildYear !== null && $woman) {
                     $womanYear = $oldestChildYear - 20;
-                    $newVal = "[{$womanYear}]";
+                    $newVal = "[[{$womanYear}]]";
                     $updates[$woman['id']] = $newVal;
                     if (isset($woman['gedcom_id'])) $globalYears[$woman['gedcom_id']] = $womanYear;
                 }
@@ -198,7 +201,7 @@ elseif ($action === 'calculate') {
                 // 2. Man from Oldest Child (if not from Woman)
                 if ($manYear === null && $oldestChildYear !== null && $man) {
                     $manYear = $oldestChildYear - 30;
-                    $newVal = "[{$manYear}]";
+                    $newVal = "[[{$manYear}]]";
                     $updates[$man['id']] = $newVal;
                     if (isset($man['gedcom_id'])) $globalYears[$man['gedcom_id']] = $manYear;
                 }
@@ -206,13 +209,13 @@ elseif ($action === 'calculate') {
                 // 3. Spouse from Spouse
                 if ($manYear !== null && $womanYear === null && $woman) {
                     $womanYear = $manYear + 10;
-                    $newVal = "[{$womanYear}]";
+                    $newVal = "[[{$womanYear}]]";
                     $updates[$woman['id']] = $newVal;
                     if (isset($woman['gedcom_id'])) $globalYears[$woman['gedcom_id']] = $womanYear;
                 }
                 elseif ($womanYear !== null && $manYear === null && $man) {
                     $manYear = $womanYear - 10;
-                    $newVal = "[{$manYear}]";
+                    $newVal = "[[{$manYear}]]";
                     $updates[$man['id']] = $newVal;
                     if (isset($man['gedcom_id'])) $globalYears[$man['gedcom_id']] = $manYear;
                 }
@@ -225,14 +228,14 @@ elseif ($action === 'calculate') {
                     if ($cy === null) {
                         if ($index === 0 && $womanYear !== null) {
                             $cy = $womanYear + 20;
-                            $newVal = "[{$cy}]";
+                            $newVal = "[[{$cy}]]";
                             $updates[$child['id']] = $newVal;
                             $childrenYears[$child['id']] = $cy; // update local tracking
                             if (isset($child['gedcom_id'])) $globalYears[$child['gedcom_id']] = $cy;
                         }
                         elseif ($index > 0 && $prevChildYear !== null) {
                             $cy = $prevChildYear + 3;
-                            $newVal = "[{$cy}]";
+                            $newVal = "[[{$cy}]]";
                             $updates[$child['id']] = $newVal;
                             $childrenYears[$child['id']] = $cy;
                             if (isset($child['gedcom_id'])) $globalYears[$child['gedcom_id']] = $cy;
@@ -255,7 +258,11 @@ elseif ($action === 'calculate') {
             // But logic above shouldn't have produced updates for existing years unless they were missing.
             // However, we should check if the DB currently has a value.
             $currentVal = $elementsById[$id]['birth_date'] ?? '';
-            if (empty($currentVal) || (strpos($currentVal, '[') === 0)) {
+            // Only overwrite empty or previously-imputed values.
+            // - Empty: ok
+            // - [[...]]: ok (our imputed marker)
+            // - [...]: DO NOT overwrite (user-entered fictional)
+            if (empty($currentVal) || (strpos($currentVal, '[[') === 0)) {
                 $updateStmt->execute(['bdate' => $val, 'id' => $id]);
                 $count++;
             }
@@ -290,7 +297,12 @@ elseif ($action === 'save_record') {
         $womanText = trim($_POST['woman'] ?? '');
         $childrenTexts = $_POST['children'] ?? [];
 
-        // Helper to parse name and dates from text like "Name (1805 - 1845)" or "Name (1805.01.01 - 1845.12.31)"
+        // Helper to parse name and dates from text like:
+        // - "Name (1805 - 1845)"
+        // - "Name (1805.01.01 - 1845.12.31)"
+        // - "Name (1805)"
+        // - "Name [1780]"  (fictional/imputed-style date shown by UI)
+        // - "Name [[1780]]" (our internal imputed marker; treat as fictional too)
         function parsePersonText($text) {
             $text = trim($text);
             if (empty($text)) return ['name' => '', 'birth' => '', 'death' => ''];
@@ -330,6 +342,13 @@ elseif ($action === 'save_record') {
                 // If no match, keep dates as-is (might be fictional date like [1805])
                 else {
                     $birth = $dates;
+                }
+            } else {
+                // Extract fictional date in brackets at the end: "Name [1780]" or "Name [[1780]]"
+                // Keep single brackets for user-entered fictional dates, keep double brackets if provided.
+                if (preg_match('/^(.+?)\s*(\[{1,2}\s*\d{4}(?:[.\-]\d{2}(?:[.\-]\d{2})?)?\s*\]{1,2})\s*$/', $text, $m)) {
+                    $name = trim($m[1]);
+                    $birth = preg_replace('/\s+/', '', $m[2]); // strip spaces inside brackets
                 }
             }
             

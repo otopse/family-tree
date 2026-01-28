@@ -60,6 +60,7 @@ $parentMap = [];
 function extractYear(?string $date): ?int {
     if (!$date) return null;
     // Remove brackets for fictional dates
+    // Supports both "[YYYY]" (user-entered fictional) and "[[YYYY]]" (auto-imputed)
     $date = str_replace(['[', ']'], '', $date);
     if (preg_match('/(\d{4})/', $date, $matches)) {
         return (int)$matches[1];
@@ -73,6 +74,10 @@ function formatDateForDisplay(?string $val): string {
     $val = trim($val);
     
     // If it's a fictional date in brackets, return as is
+    if (strpos($val, '[[') === 0 && substr($val, -2) === ']]') {
+        // Convert internal imputed marker "[[YYYY]]" to display "[YYYY]"
+        return '[' . substr($val, 2, -2) . ']';
+    }
     if (strpos($val, '[') === 0) return $val;
 
     if (preg_match('/^\d{4}$/', $val)) {
@@ -157,7 +162,8 @@ foreach ($orderedPersons as $row) {
         }
         
         // Check if birth date is fictional
-        $isFictional = strpos($row['birth_date'] ?? '', '[') === 0;
+        $birthRaw = (string)($row['birth_date'] ?? '');
+        $isFictional = (strpos($birthRaw, '[[') === 0 && substr($birthRaw, -2) === ']]') || (strpos($birthRaw, '[') === 0);
         
         // Sanity check/Defaults for display
         if (!$bYear && $dYear) $bYear = $dYear - 60;
