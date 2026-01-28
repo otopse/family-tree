@@ -275,7 +275,7 @@ debugLog("Current output buffer length: " . ob_get_length());
           <input type="hidden" name="action" value="add_record">
           <button type="submit" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
         </form>
-        <a href="/edit-tree.php?id=<?= $treeId ?>" class="btn-secondary" style="padding: 6px 12px; font-size: 0.9rem; background-color: var(--primary-color); color: white; cursor: default; pointer-events: none; opacity: 0.8;">Editovať</a>
+        <button id="edit-record-btn" class="btn-secondary" style="padding: 6px 12px; font-size: 0.9rem;" disabled>Editovať</button>
         <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
       </div>
     </div>
@@ -299,7 +299,7 @@ debugLog("Current output buffer length: " . ob_get_length());
             debugLog("=== TILES: building first-occurrence map by person key (gedcom_id or name|birth|death) ===");
           ?>
           <?php foreach ($viewData as $row): ?>
-            <div class="record-card">
+            <div class="record-card" data-record-id="<?= $row['record_id'] ?>">
               <div class="record-id">#<?= $cardCounter++ ?></div>
               
               <div class="record-row father-row">
@@ -362,6 +362,42 @@ debugLog("Current output buffer length: " . ob_get_length());
     <!-- Right: Tree View -->
     <div id="tree-view" class="split-pane right-pane">
       <iframe src="/view-tree.php?id=<?= $treeId ?>&embed=true" style="width:100%; height:100%; border:none;"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Window for Editing Record -->
+<div id="edit-record-modal" class="edit-modal" style="display: none;">
+  <div class="edit-modal-content">
+    <div class="edit-modal-header">
+      <h3>Editovať záznam</h3>
+      <button class="edit-modal-close" aria-label="Zavrieť">&times;</button>
+    </div>
+    <div class="edit-modal-body">
+      <input type="hidden" id="edit-record-id" value="">
+      <input type="hidden" id="edit-tree-id" value="<?= $treeId ?>">
+      
+      <div class="edit-input-group">
+        <label for="edit-man-input">Muž</label>
+        <input type="text" id="edit-man-input" class="edit-input" placeholder="Meno a dátumy">
+      </div>
+      
+      <div class="edit-input-group">
+        <label for="edit-woman-input">Žena</label>
+        <input type="text" id="edit-woman-input" class="edit-input" placeholder="Meno a dátumy">
+      </div>
+      
+      <div id="edit-children-container">
+        <!-- Children inputs will be added here dynamically -->
+      </div>
+      
+      <button type="button" id="add-child-btn" class="btn-add-child">+ Dieťa</button>
+    </div>
+    <div class="edit-modal-footer">
+      <button type="button" id="init-btn" class="btn-action">Inicializuj</button>
+      <button type="button" id="recalc-btn" class="btn-action">Dopočítaj</button>
+      <button type="button" id="calculate-btn" class="btn-action">Calculate</button>
+      <button type="button" id="save-record-btn" class="btn-action btn-primary">Ulož</button>
     </div>
   </div>
 </div>
@@ -698,6 +734,15 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
     box-shadow: 0 0 0 3px #1890ff;
     transition: box-shadow 0.2s;
     border-color: #1890ff;
+    background-color: #f0f7ff;
+  }
+
+  .record-card {
+    cursor: pointer;
+  }
+
+  .record-card:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
 
   .tree-canvas-placeholder {
@@ -715,6 +760,172 @@ debugLog("=== EDIT-TREE PHP RENDERING DONE ===");
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Edit Modal Styles */
+  .edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .edit-modal-content {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .edit-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .edit-modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .edit-modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .edit-modal-close:hover {
+    color: #000;
+  }
+
+  .edit-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .edit-input-group {
+    margin-bottom: 16px;
+  }
+
+  .edit-input-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .edit-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .edit-input:focus {
+    outline: none;
+    border-color: var(--primary-color, #1890ff);
+    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1);
+  }
+
+  #edit-children-container {
+    margin-bottom: 12px;
+  }
+
+  .child-input-group {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .child-input-group .edit-input {
+    flex: 1;
+  }
+
+  .remove-child-btn {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .remove-child-btn:hover {
+    background: #dc2626;
+  }
+
+  .btn-add-child {
+    background: #f3f4f6;
+    border: 1px dashed #d1d5db;
+    border-radius: 4px;
+    padding: 8px 16px;
+    cursor: pointer;
+    color: #666;
+    font-size: 14px;
+    width: 100%;
+  }
+
+  .btn-add-child:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+  }
+
+  .edit-modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .btn-action {
+    padding: 8px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .btn-action:hover {
+    background: #f9fafb;
+  }
+
+  .btn-action.btn-primary {
+    background: var(--primary-color, #1890ff);
+    color: white;
+    border-color: var(--primary-color, #1890ff);
+  }
+
+  .btn-action.btn-primary:hover {
+    background: #1677ff;
   }
 </style>
 
@@ -1304,6 +1515,237 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   
+  // Edit Record Modal functionality
+  const editRecordBtn = document.getElementById('edit-record-btn');
+  const editModal = document.getElementById('edit-record-modal');
+  const editModalClose = document.querySelector('.edit-modal-close');
+  let selectedRecordCard = null;
+
+  // Enable/disable Edit button based on selection
+  function updateEditButton() {
+    const selectedCard = document.querySelector('.record-card.selected');
+    if (selectedCard) {
+      editRecordBtn.disabled = false;
+      selectedRecordCard = selectedCard;
+    } else {
+      editRecordBtn.disabled = true;
+      selectedRecordCard = null;
+    }
+  }
+
+  // Click on record card to select it
+  const recordView = document.getElementById('record-view');
+  if (recordView) {
+    recordView.addEventListener('click', function(e) {
+      const card = e.target.closest('.record-card');
+      if (card) {
+        document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        updateEditButton();
+      }
+    });
+  }
+
+  // Open modal when Edit button is clicked
+  if (editRecordBtn) {
+    editRecordBtn.addEventListener('click', function() {
+      if (!selectedRecordCard) return;
+      loadRecordDataIntoModal(selectedRecordCard);
+      editModal.style.display = 'flex';
+    });
+  }
+
+  // Close modal
+  if (editModalClose) {
+    editModalClose.addEventListener('click', function() {
+      editModal.style.display = 'none';
+    });
+  }
+
+  // Close modal when clicking outside
+  if (editModal) {
+    editModal.addEventListener('click', function(e) {
+      if (e.target === editModal) {
+        editModal.style.display = 'none';
+      }
+    });
+  }
+
+  // Load record data from card into modal inputs
+  function loadRecordDataIntoModal(card) {
+    const recordId = card.getAttribute('data-record-id');
+    document.getElementById('edit-record-id').value = recordId;
+
+    // Get man, woman, children from card
+    const manRow = card.querySelector('.father-row .person-name');
+    const womanRow = card.querySelector('.mother-row .person-name');
+    const childrenRows = card.querySelectorAll('.children-list .child-row .person-name');
+
+    // Extract text (name + dates) from person-name elements
+    // Remove badge numbers (green or gray) at the start
+    function extractPersonText(personElement) {
+      if (!personElement) return '';
+      let text = personElement.textContent.trim();
+      // Remove badge number at start (e.g. "7 Name..." or " 7 Name...")
+      // Badge can be green (seqNum) or gray (firstSeqNum), both are numbers
+      text = text.replace(/^\s*\d+\s+/, '');
+      return text;
+    }
+
+    const manText = extractPersonText(manRow);
+    const womanText = extractPersonText(womanRow);
+
+    document.getElementById('edit-man-input').value = manText;
+    document.getElementById('edit-woman-input').value = womanText;
+
+    // Clear children container
+    const childrenContainer = document.getElementById('edit-children-container');
+    childrenContainer.innerHTML = '';
+
+    // Add existing children + one extra empty input
+    childrenRows.forEach((childRow, index) => {
+      const childText = extractPersonText(childRow);
+      addChildInput(childText);
+    });
+    // Add one extra empty child input
+    addChildInput('');
+  }
+
+  // Add child input field
+  function addChildInput(value = '') {
+    const container = document.getElementById('edit-children-container');
+    const div = document.createElement('div');
+    div.className = 'child-input-group';
+    div.innerHTML = `
+      <input type="text" class="edit-input child-input" placeholder="Meno a dátumy" value="${value}">
+      <button type="button" class="remove-child-btn">Odstrániť</button>
+    `;
+    div.querySelector('.remove-child-btn').addEventListener('click', function() {
+      div.remove();
+    });
+    container.appendChild(div);
+  }
+
+  // Add child button
+  document.getElementById('add-child-btn')?.addEventListener('click', function() {
+    addChildInput('');
+  });
+
+  // Modal action buttons
+  const treeId = <?= $treeId ?>;
+
+  // Inicializuj button
+  document.getElementById('init-btn')?.addEventListener('click', function() {
+    if (!confirm('Naozaj chcete inicializovať (vymazať vypočítané dátumy)?')) return;
+    fetch('/tree-actions.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'init', tree_id: treeId })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message);
+        window.location.reload();
+      } else {
+        alert('Chyba: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      alert('Chyba komunikácie so serverom.');
+    });
+  });
+
+  // Dopočítaj button (same as Calculate)
+  document.getElementById('recalc-btn')?.addEventListener('click', function() {
+    if (!confirm('Naozaj chcete dopočítať dátumy?')) return;
+    fetch('/tree-actions.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'calculate', tree_id: treeId })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message);
+        window.location.reload();
+      } else {
+        alert('Chyba: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      alert('Chyba komunikácie so serverom.');
+    });
+  });
+
+  // Calculate button
+  document.getElementById('calculate-btn')?.addEventListener('click', function() {
+    if (!confirm('Naozaj chcete vypočítať dátumy?')) return;
+    fetch('/tree-actions.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'calculate', tree_id: treeId })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message);
+        window.location.reload();
+      } else {
+        alert('Chyba: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      alert('Chyba komunikácie so serverom.');
+    });
+  });
+
+  // Ulož button
+  document.getElementById('save-record-btn')?.addEventListener('click', function() {
+    const recordId = document.getElementById('edit-record-id').value;
+    const manText = document.getElementById('edit-man-input').value.trim();
+    const womanText = document.getElementById('edit-woman-input').value.trim();
+    const childInputs = document.querySelectorAll('.child-input');
+    const childrenTexts = Array.from(childInputs).map(input => input.value.trim()).filter(v => v);
+
+    const formData = new URLSearchParams({
+      action: 'save_record',
+      tree_id: treeId,
+      record_id: recordId,
+      man: manText,
+      woman: womanText
+    });
+
+    childrenTexts.forEach((text, index) => {
+      formData.append('children[]', text);
+    });
+
+    fetch('/tree-actions.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message);
+        window.location.reload();
+      } else {
+        alert('Chyba: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error('Error:', err);
+      alert('Chyba komunikácie so serverom.');
+    });
+  });
+
+  // Initialize edit button state
+  updateEditButton();
+
   // Synchronization between tiles and graph
   const iframe = document.querySelector('#tree-view iframe');
   

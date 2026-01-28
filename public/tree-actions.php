@@ -267,6 +267,200 @@ elseif ($action === 'calculate') {
         jsonResponse(false, 'Chyba databázy: ' . $e->getMessage());
     }
 }
+// ---------------------------------------------------------
+// ACTION: SAVE_RECORD (Save edited record from modal)
+// ---------------------------------------------------------
+elseif ($action === 'save_record') {
+    try {
+        $recordId = (int)($_POST['record_id'] ?? 0);
+        if (!$recordId) {
+            jsonResponse(false, 'Chýba ID záznamu.');
+        }
+
+        // Verify record belongs to this tree
+        $stmt = db()->prepare('SELECT * FROM ft_records WHERE id = :id AND tree_id = :tree_id');
+        $stmt->execute(['id' => $recordId, 'tree_id' => $treeId]);
+        $record = $stmt->fetch();
+        if (!$record) {
+            jsonResponse(false, 'Záznam neexistuje alebo nepatrí do tohto rodokmeňa.');
+        }
+
+        // Parse input data
+        $manText = trim($_POST['man'] ?? '');
+        $womanText = trim($_POST['woman'] ?? '');
+        $childrenTexts = $_POST['children'] ?? [];
+
+        // Helper to parse name and dates from text like "Name (1805 - 1845)" or "Name (1805.01.01 - 1845.12.31)"
+        function parsePersonText($text) {
+            $text = trim($text);
+            if (empty($text)) return ['name' => '', 'birth' => '', 'death' => ''];
+            
+            // Extract dates in parentheses: "Name (1805 - 1845)" or "Name (1805)" or "Name (1805.01.01 - 1845.12.31)"
+            $name = $text;
+            $birth = '';
+            $death = '';
+            
+            if (preg_match('/^(.+?)\s*\(([^)]+)\)/', $text, $matches)) {
+                $name = trim($matches[1]);
+                $dates = trim($matches[2]);
+                
+                // Try "YYYY - YYYY" format
+                if (preg_match('/^(\d{4})\s*-\s*(\d{4})$/', $dates, $dMatches)) {
+                    $birth = $dMatches[1];
+                    $death = $dMatches[2];
+                }
+                // Try "YYYY.MM.DD - YYYY.MM.DD" format
+                elseif (preg_match('/^(\d{4}\.\d{2}\.\d{2})\s*-\s*(\d{4}\.\d{2}\.\d{2})$/', $dates, $dMatches)) {
+                    $birth = $dMatches[1];
+                    $death = $dMatches[2];
+                }
+                // Try "YYYY-MM-DD - YYYY-MM-DD" format
+                elseif (preg_match('/^(\d{4}-\d{2}-\d{2})\s*-\s*(\d{4}-\d{2}-\d{2})$/', $dates, $dMatches)) {
+                    $birth = $dMatches[1];
+                    $death = $dMatches[2];
+                }
+                // Try single year "YYYY"
+                elseif (preg_match('/^(\d{4})$/', $dates, $dMatches)) {
+                    $birth = $dMatches[1];
+                }
+                // Try single date "YYYY.MM.DD" or "YYYY-MM-DD"
+                elseif (preg_match('/^(\d{4}[\.-]\d{2}[\.-]\d{2})$/', $dates, $dMatches)) {
+                    $birth = $dMatches[1];
+                }
+                // If no match, keep dates as-is (might be fictional date like [1805])
+                else {
+                    $birth = $dates;
+                }
+            }
+            
+            return ['name' => $name, 'birth' => $birth, 'death' => $death];
+        }
+
+        // Get existing elements for this record
+        $stmt = db()->prepare('SELECT * FROM ft_elements WHERE record_id = :record_id ORDER BY sort_order ASC');
+        $stmt->execute(['record_id' => $recordId]);
+        $existingElements = $stmt->fetchAll();
+
+        // Update or create elements
+        $manParsed = parsePersonText($manText);
+        $womanParsed = parsePersonText($womanText);
+
+        // Update man
+        $manEl = null;
+        foreach ($existingElements as $el) {
+            if ($el['type'] === 'MUZ') {
+                $manEl = $el;
+                break;
+            }
+        }
+        if ($manParsed['name']) {
+            if ($manEl) {
+                $stmt = db()->prepare('UPDATE ft_elements SET full_name = :name, birth_date = :birth, death_date = :death WHERE id = :id');
+                $stmt->execute([
+                    'name' => $manParsed['name'],
+                    'birth' => $manParsed['birth'] ?: null,
+                    'death' => $manParsed['death'] ?: null,
+                    'id' => $manEl['id']
+                ]);
+            } else {
+                $stmt = db()->prepare('INSERT INTO ft_elements (record_id, type, full_name, birth_date, death_date, gender, sort_order) VALUES (:rid, :type, :name, :birth, :death, :gender, 0)');
+                $stmt->execute([
+                    'rid' => $recordId,
+                    'type' => 'MUZ',
+                    'name' => $manParsed['name'],
+                    'birth' => $manParsed['birth'] ?: null,
+                    'death' => $manParsed['death'] ?: null,
+                    'gender' => 'M'
+                ]);
+            }
+        } elseif ($manEl) {
+            // Delete if empty
+            $stmt = db()->prepare('DELETE FROM ft_elements WHERE id = :id');
+            $stmt->execute(['id' => $manEl['id']]);
+        }
+
+        // Update woman
+        $womanEl = null;
+        foreach ($existingElements as $el) {
+            if ($el['type'] === 'ZENA') {
+                $womanEl = $el;
+                break;
+            }
+        }
+        if ($womanParsed['name']) {
+            if ($womanEl) {
+                $stmt = db()->prepare('UPDATE ft_elements SET full_name = :name, birth_date = :birth, death_date = :death WHERE id = :id');
+                $stmt->execute([
+                    'name' => $womanParsed['name'],
+                    'birth' => $womanParsed['birth'] ?: null,
+                    'death' => $womanParsed['death'] ?: null,
+                    'id' => $womanEl['id']
+                ]);
+            } else {
+                $stmt = db()->prepare('INSERT INTO ft_elements (record_id, type, full_name, birth_date, death_date, gender, sort_order) VALUES (:rid, :type, :name, :birth, :death, :gender, 1)');
+                $stmt->execute([
+                    'rid' => $recordId,
+                    'type' => 'ZENA',
+                    'name' => $womanParsed['name'],
+                    'birth' => $womanParsed['birth'] ?: null,
+                    'death' => $womanParsed['death'] ?: null,
+                    'gender' => 'F'
+                ]);
+            }
+        } elseif ($womanEl) {
+            $stmt = db()->prepare('DELETE FROM ft_elements WHERE id = :id');
+            $stmt->execute(['id' => $womanEl['id']]);
+        }
+
+        // Update children
+        $childElements = [];
+        foreach ($existingElements as $el) {
+            if ($el['type'] === 'DIETA') {
+                $childElements[] = $el;
+            }
+        }
+
+        $sortOrder = 2;
+        foreach ($childrenTexts as $index => $childText) {
+            $childParsed = parsePersonText($childText);
+            if ($childParsed['name']) {
+                if (isset($childElements[$index])) {
+                    $stmt = db()->prepare('UPDATE ft_elements SET full_name = :name, birth_date = :birth, death_date = :death, sort_order = :sort WHERE id = :id');
+                    $stmt->execute([
+                        'name' => $childParsed['name'],
+                        'birth' => $childParsed['birth'] ?: null,
+                        'death' => $childParsed['death'] ?: null,
+                        'sort' => $sortOrder,
+                        'id' => $childElements[$index]['id']
+                    ]);
+                } else {
+                    $stmt = db()->prepare('INSERT INTO ft_elements (record_id, type, full_name, birth_date, death_date, gender, sort_order) VALUES (:rid, :type, :name, :birth, :death, :gender, :sort)');
+                    $stmt->execute([
+                        'rid' => $recordId,
+                        'type' => 'DIETA',
+                        'name' => $childParsed['name'],
+                        'birth' => $childParsed['birth'] ?: null,
+                        'death' => $childParsed['death'] ?: null,
+                        'gender' => 'U',
+                        'sort' => $sortOrder
+                    ]);
+                }
+                $sortOrder++;
+            }
+        }
+
+        // Delete excess children
+        for ($i = count($childrenTexts); $i < count($childElements); $i++) {
+            $stmt = db()->prepare('DELETE FROM ft_elements WHERE id = :id');
+            $stmt->execute(['id' => $childElements[$i]['id']]);
+        }
+
+        jsonResponse(true, 'Záznam bol úspešne uložený.');
+
+    } catch (PDOException $e) {
+        jsonResponse(false, 'Chyba databázy: ' . $e->getMessage());
+    }
+}
 else {
     jsonResponse(false, 'Neznáma akcia.');
 }
