@@ -35,12 +35,17 @@ function render_header(string $title): void {
   echo '    <div class="nav-container">';
   echo '      <div class="nav-brand"><a href="/">Family Tree</a></div>';
   echo '      <ul class="nav-menu">';
-  echo '        <li><a href="/#home">Home</a></li>';
-  echo '        <li><a href="/#features">Funkcie</a></li>';
-  echo '        <li><a href="/#pricing">Cenník</a></li>';
-  echo '        <li><a href="/#contact">Kontakt</a></li>';
+  echo '        <li><a href="/?section=home" data-section="home">Home</a></li>';
+  echo '        <li><a href="/?section=features" data-section="features">Funkcie</a></li>';
+  echo '        <li><a href="/?section=pricing" data-section="pricing">Cenník</a></li>';
+  echo '        <li><a href="/?section=contact" data-section="contact">Kontakt</a></li>';
   if ($user) {
-    echo '        <li><a href="/public-trees.php">Public Trees</a></li>';
+    echo '        <li class="nav-public">';
+    echo '          <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>';
+    echo '          <div class="nav-public-menu" role="menu" aria-label="Public Trees">';
+    echo '            <div class="nav-public-loading">Načítavam...</div>';
+    echo '          </div>';
+    echo '        </li>';
   }
   echo '      </ul>';
       echo '      <div class="nav-auth">';

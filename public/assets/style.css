@@ -156,6 +156,88 @@ body {
   background: var(--bg-secondary);
 }
 
+/* Public trees dropdown in main nav */
+.nav-public {
+  position: relative;
+}
+
+.nav-public-toggle {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-public-toggle:hover {
+  color: var(--primary-color);
+}
+
+.nav-public-toggle::after {
+  content: '▼';
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.nav-public-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  min-width: 240px;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.nav-public-menu.active {
+  display: block;
+}
+
+.nav-public-menu a {
+  display: block;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-public-menu a:last-child {
+  border-bottom: none;
+}
+
+.nav-public-menu a:hover {
+  background: var(--bg-secondary);
+}
+
+.nav-public-loading {
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.nav-public-empty {
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
 .btn-link {
   color: var(--text-secondary);
   text-decoration: none;

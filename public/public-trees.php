@@ -22,6 +22,19 @@ try {
   $dbError = $e->getMessage();
 }
 
+// JSON list for navbar dropdown
+if (!empty($_GET['list_json'])) {
+  header('Content-Type: application/json');
+  echo json_encode([
+    'success' => $dbError === null,
+    'message' => $dbError ? ('Chyba databázy: ' . $dbError) : '',
+    'trees' => array_map(static function($t) {
+      return ['id' => (int)$t['id'], 'name' => (string)$t['tree_name']];
+    }, $trees),
+  ], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
 function renderPublicTreeList(array $trees): void {
   if (empty($trees)) {
     echo '<p class="empty-state">Zatiaľ nie sú žiadne verejné rodokmene.</p>';

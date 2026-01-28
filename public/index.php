@@ -19,12 +19,17 @@ $user = current_user();
         <a href="/">Family Tree</a>
       </div>
       <ul class="nav-menu">
-        <li><a href="#home">Home</a></li>
-        <li><a href="#features">Features</a></li>
-        <li><a href="#pricing">Pricing</a></li>
-        <li><a href="#contact">Contact</a></li>
+        <li><a href="/?section=home" data-section="home">Home</a></li>
+        <li><a href="/?section=features" data-section="features">Features</a></li>
+        <li><a href="/?section=pricing" data-section="pricing">Pricing</a></li>
+        <li><a href="/?section=contact" data-section="contact">Contact</a></li>
         <?php if ($user): ?>
-          <li><a href="/public-trees.php">Public Trees</a></li>
+          <li class="nav-public">
+            <button type="button" class="nav-public-toggle" aria-haspopup="true" aria-expanded="false">Public Trees</button>
+            <div class="nav-public-menu" role="menu" aria-label="Public Trees">
+              <div class="nav-public-loading">Načítavam...</div>
+            </div>
+          </li>
         <?php endif; ?>
       </ul>
       <div class="nav-auth">

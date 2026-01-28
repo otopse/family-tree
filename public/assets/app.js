@@ -65,15 +65,109 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Public trees modal
-  const publicTreesLink = document.querySelector('a[href="/public-trees.php"]');
-  if (publicTreesLink) {
-    publicTreesLink.addEventListener('click', function(e) {
-      e.preventDefault();
-      openPublicTreesModal();
+  // Public trees dropdown in main nav
+  const publicToggle = document.querySelector('.nav-public-toggle');
+  const publicMenu = document.querySelector('.nav-public-menu');
+  if (publicToggle && publicMenu) {
+    let loaded = false;
+
+    function closePublicMenu() {
+      publicMenu.classList.remove('active');
+      publicToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPublicMenu() {
+      publicMenu.classList.add('active');
+      publicToggle.setAttribute('aria-expanded', 'true');
+      if (!loaded) {
+        loaded = true;
+        fetch('/public-trees.php?list_json=1', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+          .then(r => r.json())
+          .then(data => {
+            if (!data || data.success === false) {
+              publicMenu.innerHTML = `<div class="nav-public-empty">${(data && data.message) ? data.message : 'Chyba pri načítaní.'}</div>`;
+              return;
+            }
+            const trees = Array.isArray(data.trees) ? data.trees : [];
+            if (trees.length === 0) {
+              publicMenu.innerHTML = '<div class="nav-public-empty">Žiadne verejné rodokmene.</div>';
+              return;
+            }
+            publicMenu.innerHTML = trees
+              .map(t => `<a role="menuitem" href="/edit-tree.php?id=${encodeURIComponent(t.id)}&public_view=1">${escapeHtml(String(t.name || 'Rodokmeň'))}</a>`)
+              .join('');
+          })
+          .catch(() => {
+            publicMenu.innerHTML = '<div class="nav-public-empty">Chyba pri načítaní.</div>';
+          });
+      }
+    }
+
+    publicToggle.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (publicMenu.classList.contains('active')) closePublicMenu();
+      else openPublicMenu();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!publicToggle.contains(e.target) && !publicMenu.contains(e.target)) {
+        closePublicMenu();
+      }
+    });
+  }
+
+  // Home page section switching (no scrolling)
+  if (document.querySelector('section.hero')) {
+    const sections = ['home', 'features', 'pricing', 'contact'];
+    const map = {
+      home: document.getElementById('home'),
+      features: document.getElementById('features'),
+      pricing: document.getElementById('pricing'),
+      contact: document.getElementById('contact'),
+    };
+
+    function showSection(sectionKey) {
+      const key = sections.includes(sectionKey) ? sectionKey : 'home';
+      sections.forEach(k => {
+        const el = map[k];
+        if (!el) return;
+        el.style.display = (k === key) ? '' : 'none';
+      });
+    }
+
+    const url = new URL(window.location.href);
+    const initial = url.searchParams.get('section') || 'home';
+    showSection(initial);
+
+    document.querySelectorAll('.nav-menu a[data-section]').forEach(a => {
+      a.addEventListener('click', function(e) {
+        const section = a.getAttribute('data-section') || 'home';
+        // If we are already on "/", switch without full reload
+        if (window.location.pathname === '/' || window.location.pathname === '/index.php') {
+          e.preventDefault();
+          showSection(section);
+          const next = new URL(window.location.href);
+          next.searchParams.set('section', section);
+          window.history.pushState({}, '', next.toString());
+        }
+      });
+    });
+
+    window.addEventListener('popstate', function() {
+      const u = new URL(window.location.href);
+      showSection(u.searchParams.get('section') || 'home');
     });
   }
 });
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function openFamilyTreesModal() {
   // Remove existing modal if any
@@ -226,54 +320,7 @@ function initFamilyTreesModal(overlay) {
   }
 }
 
-function openPublicTreesModal() {
-  const existing = document.getElementById('public-trees-modal');
-  if (existing) {
-    existing.remove();
-  }
-
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'public-trees-modal';
-  overlay.innerHTML = '<div class="modal-content" style="padding: 40px; text-align: center;"><p>Načítavam...</p></div>';
-  document.body.appendChild(overlay);
-
-  fetch('/public-trees.php?modal=1')
-    .then(r => r.text())
-    .then(html => {
-      overlay.innerHTML = html;
-      initPublicTreesModal(overlay);
-      setTimeout(() => overlay.classList.add('active'), 10);
-    })
-    .catch(error => {
-      console.error('Error loading public trees:', error);
-      overlay.innerHTML = '<div class="modal-content" style="padding: 40px;"><p>Chyba pri načítaní.</p></div>';
-    });
-}
-
-function closePublicTreesModal() {
-  const modal = document.getElementById('public-trees-modal');
-  if (modal) {
-    modal.classList.remove('active');
-    setTimeout(() => modal.remove(), 300);
-  }
-}
-
-function initPublicTreesModal(overlay) {
-  const closeBtn = overlay.querySelector('.modal-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      closePublicTreesModal();
-    });
-  }
-
-  overlay.addEventListener('click', function(e) {
-    if (e.target === overlay) {
-      closePublicTreesModal();
-    }
-  });
-}
+// Public Trees no longer opens a modal (dropdown only)
 
 function refreshTreeList(isModal) {
   const containerId = isModal ? '#trees-container' : '#trees-container'; // ID is same, context differs
