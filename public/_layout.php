@@ -48,6 +48,7 @@ function render_header(string $title): void {
         echo '          <div class="nav-user-menu">';
         echo '            <a href="/account.php">Môj účet</a>';
         echo '            <a href="/family-trees.php">Moje rodokmene</a>';
+        echo '            <a href="/public-trees.php">Public Trees</a>';
         echo '            <a href="/logout.php">Odhlásiť sa</a>';
         echo '          </div>';
         echo '        </div>';

@@ -23,6 +23,16 @@ try {
     $pdo->exec("ALTER TABLE ft_elements MODIFY COLUMN birth_date VARCHAR(50) NULL");
     $pdo->exec("ALTER TABLE ft_elements MODIFY COLUMN death_date VARCHAR(50) NULL");
     echo "Columns birth_date and death_date set to VARCHAR.\n";
+
+    // 3. Add "public" column to family_trees if missing
+    $stmt = $pdo->query("SHOW COLUMNS FROM family_trees LIKE 'public'");
+    if ($stmt->rowCount() === 0) {
+        echo "Adding public column to family_trees...\n";
+        $pdo->exec("ALTER TABLE family_trees ADD COLUMN public TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled");
+        echo "Column public added successfully.\n";
+    } else {
+        echo "Column public already exists.\n";
+    }
     
 } catch (PDOException $e) {
     echo "Error: " . $e->getMessage() . "\n";

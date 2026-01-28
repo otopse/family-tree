@@ -26,9 +26,10 @@ $user = require_login();
 $treeId = (int) ($_GET['id'] ?? 0);
 debugLog("Tree ID: $treeId, User ID: " . ($user['id'] ?? 'null'));
 
-// Fetch tree and verify ownership
-$stmt = db()->prepare('SELECT * FROM family_trees WHERE id = :id AND owner = :owner');
-$stmt->execute(['id' => $treeId, 'owner' => $user['id']]);
+// Fetch tree (owner or public view)
+$forcePublicView = !empty($_GET['public_view']);
+$stmt = db()->prepare('SELECT * FROM family_trees WHERE id = :id');
+$stmt->execute(['id' => $treeId]);
 $tree = $stmt->fetch();
 
 if (!$tree) {
@@ -36,11 +37,27 @@ if (!$tree) {
   redirect('/family-trees.php');
 }
 
+$isOwner = ((int)($tree['owner'] ?? 0) === (int)($user['id'] ?? 0));
+$isPublic = !empty($tree['public']);
+
+// Access: owner always; non-owner only if public
+if (!$isOwner && !$isPublic) {
+  flash('error', 'Rodokmeň neexistuje alebo k nemu nemáte prístup.');
+  redirect('/family-trees.php');
+}
+
+// Read-only if forced public view or if you are not the owner
+$isReadOnly = $forcePublicView || !$isOwner;
+
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $action = $_POST['action'] ?? '';
   
   if ($action === 'add_record') {
+    if ($isReadOnly) {
+      flash('error', 'Verejný rodokmeň nie je možné upravovať.');
+      redirect('/edit-tree.php?id=' . $treeId . '&public_view=1');
+    }
     $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
     $stmt = db()->prepare(
       'INSERT INTO ft_records (tree_id, owner, record_name, pattern, created, modified, enabled)
@@ -271,9 +288,11 @@ debugLog("Current output buffer length: " . ob_get_length());
         <div class="search-box" style="display: inline-block;">
           <input type="text" placeholder="Hľadať..." class="form-control" id="search-input" style="width: 150px; padding: 4px 8px;">
         </div>
-        <button type="button" id="add-record-btn" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
-        <button type="button" id="edit-record-btn" class="btn-edit-record" style="padding: 6px 12px; font-size: 0.9rem;" disabled title="Vyberte dlaždicu kliknutím">Editovať</button>
-        <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
+        <?php if (!$isReadOnly): ?>
+          <button type="button" id="add-record-btn" class="btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">+ Záznam</button>
+          <button type="button" id="edit-record-btn" class="btn-edit-record" style="padding: 6px 12px; font-size: 0.9rem;" disabled title="Vyberte dlaždicu kliknutím">Editovať</button>
+          <button id="export-pdf-btn" class="btn-primary" style="padding: 6px 12px;">Export PDF</button>
+        <?php endif; ?>
       </div>
     </div>
   </div><?php
@@ -363,36 +382,38 @@ debugLog("Current output buffer length: " . ob_get_length());
   </div>
 </div>
 
-<!-- Modal Window for Editing Record -->
-<div id="edit-record-modal" class="edit-modal" style="display: none;">
-  <div class="edit-modal-content">
-    <div class="edit-modal-header">
-      <h3>Editovať záznam</h3>
-      <button class="edit-modal-close" aria-label="Zavrieť">&times;</button>
-    </div>
-    <div class="edit-modal-body">
-      <input type="hidden" id="edit-record-id" value="">
-      <input type="hidden" id="edit-tree-id" value="<?= $treeId ?>">
-      
-      <div class="edit-input-group">
-        <input type="text" id="edit-man-input" class="edit-input" placeholder="Muž">
+<?php if (!$isReadOnly): ?>
+  <!-- Modal Window for Editing/Creating Record -->
+  <div id="edit-record-modal" class="edit-modal" style="display: none;">
+    <div class="edit-modal-content">
+      <div class="edit-modal-header">
+        <h3>Editovať záznam</h3>
+        <button class="edit-modal-close" aria-label="Zavrieť">&times;</button>
       </div>
-      
-      <div class="edit-input-group">
-        <input type="text" id="edit-woman-input" class="edit-input" placeholder="Žena">
+      <div class="edit-modal-body">
+        <input type="hidden" id="edit-record-id" value="">
+        <input type="hidden" id="edit-tree-id" value="<?= $treeId ?>">
+        
+        <div class="edit-input-group">
+          <input type="text" id="edit-man-input" class="edit-input" placeholder="Muž">
+        </div>
+        
+        <div class="edit-input-group">
+          <input type="text" id="edit-woman-input" class="edit-input" placeholder="Žena">
+        </div>
+        
+        <div id="edit-children-container">
+          <!-- Children inputs will be added here dynamically -->
+        </div>
+        
+        <button type="button" id="add-child-btn" class="btn-add-child">+ Dieťa</button>
       </div>
-      
-      <div id="edit-children-container">
-        <!-- Children inputs will be added here dynamically -->
+      <div class="edit-modal-footer">
+        <button type="button" id="save-record-btn" class="btn-action btn-primary">Ulož</button>
       </div>
-      
-      <button type="button" id="add-child-btn" class="btn-add-child">+ Dieťa</button>
-    </div>
-    <div class="edit-modal-footer">
-      <button type="button" id="save-record-btn" class="btn-action btn-primary">Ulož</button>
     </div>
   </div>
-</div>
+<?php endif; ?>
 <?php
 debugLog("Container-fluid closing tag rendered");
 debugLog("About to render inline styles");
@@ -1522,6 +1543,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
   
+  const IS_READ_ONLY = <?= $isReadOnly ? 'true' : 'false' ?>;
+
   // Edit Record Modal functionality
   const editRecordBtn = document.getElementById('edit-record-btn');
   const editModal = document.getElementById('edit-record-modal');
@@ -1532,10 +1555,10 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateEditButton() {
     const selectedCard = document.querySelector('.record-card.selected');
     if (selectedCard) {
-      editRecordBtn.disabled = false;
+      if (editRecordBtn) editRecordBtn.disabled = false;
       selectedRecordCard = selectedCard;
     } else {
-      editRecordBtn.disabled = true;
+      if (editRecordBtn) editRecordBtn.disabled = true;
       selectedRecordCard = null;
     }
   }
@@ -1581,7 +1604,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Open modal when Edit button is clicked
-  if (editRecordBtn && editModal) {
+  if (!IS_READ_ONLY && editRecordBtn && editModal) {
     editRecordBtn.addEventListener('click', function() {
       if (!selectedRecordCard) return;
       loadRecordDataIntoModal(selectedRecordCard);
@@ -1597,14 +1620,14 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Close modal
-  if (editModalClose) {
+  if (!IS_READ_ONLY && editModalClose) {
     editModalClose.addEventListener('click', function() {
       editModal.style.display = 'none';
     });
   }
 
   // Close modal when clicking outside
-  if (editModal) {
+  if (!IS_READ_ONLY && editModal) {
     editModal.addEventListener('click', function(e) {
       if (e.target === editModal) {
         editModal.style.display = 'none';
@@ -1668,15 +1691,17 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Add child button
-  document.getElementById('add-child-btn')?.addEventListener('click', function() {
-    addChildInput('');
-  });
+  if (!IS_READ_ONLY) {
+    document.getElementById('add-child-btn')?.addEventListener('click', function() {
+      addChildInput('');
+    });
+  }
 
   // Modal action buttons
   const treeId = <?= $treeId ?>;
 
   // "+ Záznam" -> open the same modal, but empty (create mode)
-  document.getElementById('add-record-btn')?.addEventListener('click', function() {
+  if (!IS_READ_ONLY) document.getElementById('add-record-btn')?.addEventListener('click', function() {
     // Clear selection (optional) but ensure Edit button state is correct
     document.querySelectorAll('.record-card').forEach(c => c.classList.remove('selected'));
     selectedRecordCard = null;
@@ -1701,7 +1726,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // Ulož button
-  document.getElementById('save-record-btn')?.addEventListener('click', function() {
+  if (!IS_READ_ONLY) document.getElementById('save-record-btn')?.addEventListener('click', function() {
     const recordId = document.getElementById('edit-record-id').value; // empty => create
     const manText = document.getElementById('edit-man-input').value.trim();
     const womanText = document.getElementById('edit-woman-input').value.trim();
@@ -1904,7 +1929,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const exportPdfBtn = document.getElementById('export-pdf-btn');
   console.log('[EDIT-TREE] Export PDF button found:', exportPdfBtn !== null);
   
-  if (exportPdfBtn) {
+  if (!IS_READ_ONLY && exportPdfBtn) {
     console.log('[EDIT-TREE] Export PDF button exists, adding event listener');
     exportPdfBtn.addEventListener('click', function() {
       console.log('[EDIT-TREE] Export PDF button clicked');
@@ -2140,7 +2165,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.textContent = originalText;
       }
     });
-  } else {
+  } else if (!IS_READ_ONLY) {
     console.error('[EDIT-TREE] Export PDF button NOT FOUND in DOM');
   }
 });

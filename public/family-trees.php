@@ -32,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
       $stmt = db()->prepare(
-        'INSERT INTO family_trees (owner, tree_name, tree_nodes, created, modified, enabled)
-         VALUES (:owner, :tree_name, :tree_nodes, :created, :modified, :enabled)'
+        'INSERT INTO family_trees (owner, tree_name, tree_nodes, created, modified, enabled, public)
+         VALUES (:owner, :tree_name, :tree_nodes, :created, :modified, :enabled, :public)'
       );
       $stmt->execute([
         'owner' => $user['id'],
@@ -42,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'created' => $now,
         'modified' => $now,
         'enabled' => 1,
+        'public' => 0,
       ]);
 
       jsonResponse(true, 'Rodokmeň bol úspešne vytvorený.');
@@ -75,8 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
       $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
       $stmt = db()->prepare(
-        'INSERT INTO family_trees (owner, tree_name, tree_nodes, created, modified, enabled)
-         VALUES (:owner, :tree_name, :tree_nodes, :created, :modified, :enabled)'
+        'INSERT INTO family_trees (owner, tree_name, tree_nodes, created, modified, enabled, public)
+         VALUES (:owner, :tree_name, :tree_nodes, :created, :modified, :enabled, :public)'
       );
       
       $stmt->execute([
@@ -86,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'created' => $now,
         'modified' => $now,
         'enabled' => 1,
+        'public' => 0,
       ]);
       
       $treeId = (int)db()->lastInsertId();
@@ -135,6 +137,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         jsonResponse(false, 'Rodokmeň sa nepodarilo premenovať.');
       }
     }
+    elseif ($action === 'set_public') {
+      $id = (int) ($_POST['id'] ?? 0);
+      $public = (int)($_POST['public'] ?? 0) ? 1 : 0;
+      if (!$id) {
+        jsonResponse(false, 'Chýba ID rodokmeňa.');
+      }
+      $now = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+      $stmt = db()->prepare(
+        'UPDATE family_trees SET public = :public, modified = :modified WHERE id = :id AND owner = :owner'
+      );
+      $stmt->execute([
+        'public' => $public,
+        'modified' => $now,
+        'id' => $id,
+        'owner' => $user['id'],
+      ]);
+      if ($stmt->rowCount() > 0) {
+        jsonResponse(true, $public ? 'Rodokmeň je verejný.' : 'Rodokmeň je súkromný.');
+      }
+      // No row changed (same value) still OK
+      jsonResponse(true, 'Nastavenie bolo uložené.');
+    }
     else {
       jsonResponse(false, 'Neznáma akcia.');
     }
@@ -150,7 +174,7 @@ $dbError = null;
 
 try {
   $stmt = db()->prepare(
-    'SELECT id, tree_name, created, modified, enabled
+    'SELECT id, tree_name, created, modified, enabled, public
      FROM family_trees
      WHERE owner = :owner
      ORDER BY modified DESC, created DESC'
@@ -173,6 +197,7 @@ function renderTreeList(array $trees): void {
       <thead>
         <tr>
           <th>Názov</th>
+          <th>Public</th>
           <th>Vytvorený</th>
           <th>Upravený</th>
           <th class="actions-col">Akcie</th>
@@ -191,12 +216,20 @@ function renderTreeList(array $trees): void {
                 <button type="button" class="btn-icon cancel-rename" title="Zrušiť">❌</button>
               </form>
             </td>
+            <td class="meta-col" style="text-align:center;">
+              <input
+                type="checkbox"
+                class="public-toggle"
+                data-id="<?= (int)$tree['id'] ?>"
+                <?= !empty($tree['public']) ? 'checked' : '' ?>
+                aria-label="Public"
+                title="Verejný rodokmeň"
+              >
+            </td>
             <td class="meta-col"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></td>
             <td class="meta-col"><?= e(date('d.m.Y H:i', strtotime($tree['modified']))) ?></td>
             <td class="actions-col">
               <a href="/edit-tree.php?id=<?= $tree['id'] ?>" class="btn-icon" title="Editovať rodokmeň">👥</a>
-              <button type="button" class="btn-icon init-tree" title="Inicializovať (vymazať dopočítané)" onclick="initTree(<?= $tree['id'] ?>)">🔄</button>
-              <button type="button" class="btn-icon calc-tree" title="Dopočítať dátumy" onclick="calculateTree(<?= $tree['id'] ?>)">🧮</button>
               <button type="button" class="btn-icon edit-tree" data-id="<?= $tree['id'] ?>" title="Premenovať">✏️</button>
               <button type="button" class="btn-icon delete-tree" data-id="<?= $tree['id'] ?>" title="Zmazať" onclick="deleteTree(<?= $tree['id'] ?>)">🗑️</button>
             </td>
@@ -332,58 +365,32 @@ render_header('Moje rodokmene');
   </div>
 </div>
 <script>
-async function initTree(id) {
-  if (!confirm('Naozaj chcete vymazať všetky dopočítané dátumy?')) return;
-  
+document.addEventListener('change', async (e) => {
+  const cb = e.target && e.target.classList && e.target.classList.contains('public-toggle') ? e.target : null;
+  if (!cb) return;
+
+  const treeId = cb.getAttribute('data-id');
+  const isPublic = cb.checked ? 1 : 0;
+  const csrf = document.querySelector('input[name="csrf_token"]')?.value || '';
+
   try {
     const fd = new FormData();
-    fd.append('action', 'init');
-    fd.append('tree_id', id);
-    
-    // Attempt to get CSRF
-    const csrf = document.querySelector('input[name="csrf_token"]');
-    if (csrf) fd.append('csrf_token', csrf.value);
+    fd.append('csrf_token', csrf);
+    fd.append('action', 'set_public');
+    fd.append('id', treeId);
+    fd.append('public', String(isPublic));
 
-    const res = await fetch('/tree-actions.php', { method: 'POST', body: fd });
+    const res = await fetch('/family-trees.php', { method: 'POST', body: fd });
     const data = await res.json();
-    
-    if (data.success) {
-      alert(data.message);
-      location.reload();
-    } else {
+    if (!data.success) {
+      cb.checked = !cb.checked;
       alert('Chyba: ' + data.message);
     }
-  } catch (e) {
-    alert('Chyba komunikácie: ' + e.message);
+  } catch (err) {
+    cb.checked = !cb.checked;
+    alert('Chyba komunikácie so serverom.');
   }
-}
-
-async function calculateTree(id) {
-  if (!confirm('Spustiť výpočet dátumov? Toto môže chvíľu trvať.')) return;
-  
-  try {
-    const fd = new FormData();
-    fd.append('action', 'calculate');
-    fd.append('tree_id', id);
-    
-    const csrf = document.querySelector('input[name="csrf_token"]');
-    if (csrf) fd.append('csrf_token', csrf.value);
-
-    const res = await fetch('/tree-actions.php', { method: 'POST', body: fd });
-    const data = await res.json();
-    
-    if (data.success) {
-      alert(data.message);
-      location.reload();
-    } else {
-      alert('Chyba: ' + data.message);
-    }
-  } catch (e) {
-    alert('Chyba komunikácie: ' + e.message);
-  }
-}
-
-// ... existing deleteTree or others ...
+});
 </script>
 
 <?php

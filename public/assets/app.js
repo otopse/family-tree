@@ -64,6 +64,15 @@ document.addEventListener('DOMContentLoaded', function() {
       openFamilyTreesModal();
     });
   }
+
+  // Public trees modal
+  const publicTreesLink = document.querySelector('a[href="/public-trees.php"]');
+  if (publicTreesLink) {
+    publicTreesLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      openPublicTreesModal();
+    });
+  }
 });
 
 function openFamilyTreesModal() {
@@ -179,7 +188,91 @@ function initFamilyTreesModal(overlay) {
         row.querySelector('.edit-tree').style.display = '';
       }
     });
+
+    // Public checkbox toggle (event delegation)
+    treesContainer.addEventListener('change', function(e) {
+      const target = e.target;
+      if (!target || !target.classList || !target.classList.contains('public-toggle')) return;
+
+      const treeId = target.getAttribute('data-id');
+      const isPublic = target.checked ? 1 : 0;
+      const token = overlay.querySelector('input[name="csrf_token"]')?.value
+        || document.querySelector('input[name="csrf_token"]')?.value
+        || '';
+
+      const formData = new FormData();
+      formData.append('action', 'set_public');
+      formData.append('id', treeId);
+      formData.append('public', String(isPublic));
+      if (token) formData.append('csrf_token', token);
+
+      fetch('/family-trees.php', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) {
+          target.checked = !target.checked;
+          showFlash(data.message, 'error', true);
+        }
+      })
+      .catch(() => {
+        target.checked = !target.checked;
+        showFlash('Chyba komunikácie so serverom.', 'error', true);
+      });
+    });
   }
+}
+
+function openPublicTreesModal() {
+  const existing = document.getElementById('public-trees-modal');
+  if (existing) {
+    existing.remove();
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'public-trees-modal';
+  overlay.innerHTML = '<div class="modal-content" style="padding: 40px; text-align: center;"><p>Načítavam...</p></div>';
+  document.body.appendChild(overlay);
+
+  fetch('/public-trees.php?modal=1')
+    .then(r => r.text())
+    .then(html => {
+      overlay.innerHTML = html;
+      initPublicTreesModal(overlay);
+      setTimeout(() => overlay.classList.add('active'), 10);
+    })
+    .catch(error => {
+      console.error('Error loading public trees:', error);
+      overlay.innerHTML = '<div class="modal-content" style="padding: 40px;"><p>Chyba pri načítaní.</p></div>';
+    });
+}
+
+function closePublicTreesModal() {
+  const modal = document.getElementById('public-trees-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    setTimeout(() => modal.remove(), 300);
+  }
+}
+
+function initPublicTreesModal(overlay) {
+  const closeBtn = overlay.querySelector('.modal-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      closePublicTreesModal();
+    });
+  }
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      closePublicTreesModal();
+    }
+  });
 }
 
 function refreshTreeList(isModal) {
