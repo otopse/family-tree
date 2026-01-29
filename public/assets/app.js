@@ -362,6 +362,7 @@ function handleTreeFormSubmit(form, isModal) {
   submitBtn.textContent = 'Pracujem...';
 
   const formData = new FormData(form);
+  const isImport = formData.get('action') === 'import_gedcom';
 
   fetch('/family-trees.php', {
     method: 'POST',
@@ -373,6 +374,43 @@ function handleTreeFormSubmit(form, isModal) {
     if (data.success) {
       showFlash(data.message, 'success', isModal);
       form.reset();
+      
+      // After GEDCOM import, automatically run init + calculate
+      if (isImport && data.run_init_calc && data.tree_id) {
+        const treeId = data.tree_id;
+        const csrf = formData.get('csrf_token') || document.querySelector('input[name="csrf_token"]')?.value || '';
+        
+        // Run init
+        const initData = new FormData();
+        initData.append('action', 'init');
+        initData.append('tree_id', treeId);
+        if (csrf) initData.append('csrf_token', csrf);
+        
+        fetch('/tree-actions.php', { method: 'POST', body: initData })
+          .then(r => r.json())
+          .then(initRes => {
+            if (initRes.success) {
+              // Run calculate
+              const calcData = new FormData();
+              calcData.append('action', 'calculate');
+              calcData.append('tree_id', treeId);
+              if (csrf) calcData.append('csrf_token', csrf);
+              
+              return fetch('/tree-actions.php', { method: 'POST', body: calcData })
+                .then(r => r.json());
+            }
+            return initRes;
+          })
+          .then(calcRes => {
+            if (calcRes.success) {
+              showFlash(data.message + ' ' + calcRes.message, 'success', isModal);
+            }
+          })
+          .catch(() => {
+            // Silent fail - init/calc errors don't block import success
+          });
+      }
+      
       refreshTreeList(isModal);
     } else {
       showFlash(data.message, 'error', isModal);

@@ -345,8 +345,11 @@ if ($isEmbed) {
                 <div style="margin-bottom: 12px;">
                     <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong> <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
+                <div style="margin-bottom: 8px;">
+                    <strong style="font-size: 12px; color: #666;">Dátum vytvorenia:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
+                </div>
+                <div style="margin-bottom: 12px; font-size: 12px; color: #666;" id="view-date-display-full">
+                    <strong>Dátum zobrazenia:</strong> <span id="view-date-value-full"></span>
                 </div>
                 <div style="margin-bottom: 12px; text-align: center;">
                     <a id="qrcode-link" href="#" target="_blank" rel="noopener" style="display: inline-block;"><div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div></a>
@@ -403,8 +406,11 @@ if ($isEmbed) {
                 <div style="margin-bottom: 12px;">
                     <strong style="font-size: 12px; color: #666;">Rodokmeň:</strong> <span style="font-size: 14px; font-weight: 600;"><?= e($tree['tree_name']) ?></span>
                 </div>
-                <div style="margin-bottom: 12px;">
-                    <strong style="font-size: 12px; color: #666;">Vytvorený:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
+                <div style="margin-bottom: 8px;">
+                    <strong style="font-size: 12px; color: #666;">Dátum vytvorenia:</strong> <span style="font-size: 13px;"><?= e(date('d.m.Y H:i', strtotime($tree['created']))) ?></span>
+                </div>
+                <div style="margin-bottom: 12px; font-size: 12px; color: #666;" id="view-date-display-full">
+                    <strong>Dátum zobrazenia:</strong> <span id="view-date-value-full"></span>
                 </div>
                 <div style="margin-bottom: 12px; text-align: center;">
                     <a id="qrcode-link" href="#" target="_blank" rel="noopener" style="display: inline-block;"><div id="qrcode" style="margin: 0 auto; width: 120px; height: 120px;"></div></a>
@@ -562,7 +568,9 @@ debugLog("JavaScript script tag opened");
         paddingX: 50,
         paddingY: 50,
         charWidth: 7,
-        basePadding: 20
+        basePadding: 20,
+        fontSize: 11,
+        fontFamily: 'Segoe UI, sans-serif'
     };
 
     // Wait for DOM to be ready
@@ -684,7 +692,14 @@ debugLog("JavaScript script tag opened");
                 ind.displayId = ind.seqNum || 0;
                 
                 // Width = badge + margin + text + padding
-                ind.width = badgeWidth + badgeMargin + (displayText.length * CONFIG.charWidth) + CONFIG.basePadding;
+                // Measure text more accurately using canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = CONFIG.fontSize + 'px ' + CONFIG.fontFamily;
+                const textMetrics = ctx.measureText(displayText);
+                const textWidth = textMetrics.width;
+                
+                ind.width = badgeWidth + badgeMargin + textWidth + CONFIG.basePadding;
             } catch (e) {
                 widthErrors++;
                 debugLog(`Error calculating width for individual: ${JSON.stringify(ind)}`, e.message);
@@ -948,7 +963,7 @@ debugLog("JavaScript script tag opened");
             wrapper.appendChild(svg);
             debugLog("SVG appended successfully. Graph rendering complete!");
             
-            // Position info panel at the same height as first graphical element
+            // Position info panel and QR code
             const infoPanel = document.getElementById('info-panel');
             if (infoPanel && orderedIndividuals.length > 0) {
                 const firstInd = orderedIndividuals[0];
@@ -956,10 +971,48 @@ debugLog("JavaScript script tag opened");
                 infoPanel.style.top = firstY + 'px';
                 infoPanel.style.display = 'block';
                 
+                // Find rightmost graphical element
+                let maxRightX = 0;
+                orderedIndividuals.forEach(ind => {
+                    const x = getX(ind.birthYear);
+                    const rightX = x + ind.width;
+                    if (rightX > maxRightX) {
+                        maxRightX = rightX;
+                    }
+                });
+                
+                // Position info panel: right edge aligned with rightmost element
+                // Info panel is positioned absolute with right: 20px by default
+                // We need to calculate the right offset so that the panel's right edge aligns with maxRightX
+                if (maxRightX > 0) {
+                    const svgRect = svg.getBoundingClientRect();
+                    const wrapperRect = wrapper.getBoundingClientRect();
+                    const panelWidth = 200; // info-panel width
+                    const rightOffset = wrapperRect.width - maxRightX - panelWidth - 20; // 20px padding from edge
+                    if (rightOffset > 0) {
+                        infoPanel.style.right = rightOffset + 'px';
+                    } else {
+                        infoPanel.style.right = '20px'; // fallback to default
+                    }
+                }
+                
+                // Set view date (for both embed and full page)
+                const viewDateEl = document.getElementById('view-date-value');
+                const viewDateElFull = document.getElementById('view-date-value-full');
+                if (viewDateEl || viewDateElFull) {
+                    const now = new Date();
+                    const dateStr = now.toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                    const timeStr = now.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+                    const dateTimeStr = dateStr + ' ' + timeStr;
+                    if (viewDateEl) viewDateEl.textContent = dateTimeStr;
+                    if (viewDateElFull) viewDateElFull.textContent = dateTimeStr;
+                }
+                
+                const qrCodeDiv = document.getElementById('qrcode');
+                
                 // Generate QR code and set link to open page in new window
                 const currentUrl = window.location.href;
                 const qrCodeLink = document.getElementById('qrcode-link');
-                const qrCodeDiv = document.getElementById('qrcode');
                 if (qrCodeLink) qrCodeLink.href = currentUrl;
                 if (qrCodeDiv) {
                     const qrSize = 120;
@@ -1131,7 +1184,9 @@ debugLog("JavaScript script tag opened");
                 ctx.fillStyle = '#666';
                 ctx.font = 'bold ' + (12 * scale) + 'px "Segoe UI", sans-serif';
                 ctx.fillText('Rodokmeň: ' + treeName, panelLeft + 16 * scale, 28 * scale);
-                ctx.fillText('Vytvorený: ' + treeCreated, panelLeft + 16 * scale, 52 * scale);
+                const viewDate = new Date().toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date().toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' });
+                ctx.fillText('Dátum vytvorenia: ' + treeCreated, panelLeft + 16 * scale, 52 * scale);
+                ctx.fillText('Dátum zobrazenia: ' + viewDate, panelLeft + 16 * scale, 76 * scale);
             }
             function drawCopyrightAndFinish() {
                 const panelLeft = svgWidth * scale;

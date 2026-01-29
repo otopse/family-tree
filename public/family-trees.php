@@ -94,7 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       
       try {
         parse_and_import_gedcom($file['tmp_name'], $treeId, (int)$user['id']);
-        jsonResponse(true, 'GEDCOM súbor bol úspešne importovaný.');
+        
+        // After successful import, run init + calculate automatically
+        // Run init (clear imputed dates)
+        $initStmt = db()->prepare("UPDATE ft_elements e JOIN ft_records r ON e.record_id = r.id SET e.birth_date = NULL WHERE r.tree_id = :tree_id AND e.birth_date LIKE '[[%]]'");
+        $initStmt->execute(['tree_id' => $treeId]);
+        $initStmt = db()->prepare("UPDATE ft_elements e JOIN ft_records r ON e.record_id = r.id SET e.death_date = NULL WHERE r.tree_id = :tree_id AND e.death_date LIKE '[[%]]'");
+        $initStmt->execute(['tree_id' => $treeId]);
+        
+        // Run calculate (impute dates) - call tree-actions.php logic
+        // We'll trigger it via HTTP request to tree-actions.php
+        // But for now, return success and let client trigger it
+        jsonResponse(true, 'GEDCOM súbor bol úspešne importovaný.', ['tree_id' => $treeId, 'run_init_calc' => true]);
       } catch (Exception $e) {
         // If parsing fails, we might want to delete the tree or just warn
         error_log('GEDCOM Import Error: ' . $e->getMessage());
