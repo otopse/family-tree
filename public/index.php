@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_bootstrap.php';
 
-$user = current_user();
+$user = current_user(); 
 ?><!doctype html>
 <html lang="en">
 <head>
